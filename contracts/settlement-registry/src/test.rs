@@ -1567,3 +1567,468 @@ fn test_validation_zero_tx_hash_rejected() {
     );
     assert_eq!(res, Err(Ok(Error::InvalidCommitment)));
 }
+
+// ---------------------------------------------------------------------------
+// ADVERSARIAL SETTLEMENT TEST SUITE
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_adversarial_duplicate_observation() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer1 = Address::generate(&env);
+    let observer2 = Address::generate(&env);
+    client.add_observer(&observer1);
+    client.add_observer(&observer2);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+
+    // Initial observation succeeds
+    client.record_observation(
+        &observer1,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+
+    // Adversarial: observer1 attempts second observation
+    let res = client.try_record_observation(
+        &observer1,
+        &case_id,
+        &sample_bytes(&env, 5),
+        &100,
+        &sample_bytes(&env, 6),
+    );
+    assert_eq!(res, Err(Ok(Error::InvalidState)));
+
+    // Adversarial: observer2 attempts second observation
+    let res = client.try_record_observation(
+        &observer2,
+        &case_id,
+        &sample_bytes(&env, 7),
+        &100,
+        &sample_bytes(&env, 8),
+    );
+    assert_eq!(res, Err(Ok(Error::InvalidState)));
+}
+
+#[test]
+fn test_adversarial_duplicate_reconciliation() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    // Case 1: Match then duplicate match or break
+    let case_id1 = sample_bytes(&env, 1);
+    client.create_case(&case_id1, &owner, &None, &sample_bytes(&env, 2), &200);
+    client.record_observation(
+        &observer,
+        &case_id1,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_match(&observer, &case_id1);
+
+    // Duplicate match fails
+    assert_eq!(
+        client.try_record_match(&observer, &case_id1),
+        Err(Ok(Error::InvalidState))
+    );
+    // Break after match fails
+    assert_eq!(
+        client.try_record_break(&observer, &case_id1, &BreakCode::AmountMismatch),
+        Err(Ok(Error::InvalidState))
+    );
+
+    // Case 2: Break then duplicate break or match
+    let case_id2 = sample_bytes(&env, 5);
+    client.create_case(&case_id2, &owner, &None, &sample_bytes(&env, 6), &200);
+    client.record_observation(
+        &observer,
+        &case_id2,
+        &sample_bytes(&env, 7),
+        &100,
+        &sample_bytes(&env, 8),
+    );
+    client.record_break(&observer, &case_id2, &BreakCode::LateSettlement);
+
+    // Duplicate break fails
+    assert_eq!(
+        client.try_record_break(&observer, &case_id2, &BreakCode::LateSettlement),
+        Err(Ok(Error::InvalidState))
+    );
+    // Match after break fails
+    assert_eq!(
+        client.try_record_match(&observer, &case_id2),
+        Err(Ok(Error::InvalidState))
+    );
+}
+
+#[test]
+fn test_adversarial_wrong_observer() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let legitimate_observer = Address::generate(&env);
+    let rogue_observer = Address::generate(&env);
+    client.add_observer(&legitimate_observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+
+    // Rogue observer tries to record observation
+    assert_eq!(
+        client.try_record_observation(
+            &rogue_observer,
+            &case_id,
+            &sample_bytes(&env, 3),
+            &100,
+            &sample_bytes(&env, 4),
+        ),
+        Err(Ok(Error::ObserverNotRegistered))
+    );
+
+    // Legitimate observer records observation
+    client.record_observation(
+        &legitimate_observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+
+    // Rogue observer tries to record match
+    assert_eq!(
+        client.try_record_match(&rogue_observer, &case_id),
+        Err(Ok(Error::ObserverNotRegistered))
+    );
+
+    // Rogue observer tries to record break
+    assert_eq!(
+        client.try_record_break(&rogue_observer, &case_id, &BreakCode::AmountMismatch),
+        Err(Ok(Error::ObserverNotRegistered))
+    );
+}
+
+#[test]
+fn test_adversarial_wrong_commitment() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+    let zero_comm = zero_bytes(&env);
+
+    let case_id = sample_bytes(&env, 1);
+
+    // Zero terms commitment
+    assert_eq!(
+        client.try_create_case(
+            &case_id,
+            &owner,
+            &Some(counterparty.clone()),
+            &zero_comm,
+            &200
+        ),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    // Create case properly
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 2),
+        &200,
+    );
+
+    // Zero observation commitment
+    assert_eq!(
+        client.try_record_observation(
+            &observer,
+            &case_id,
+            &sample_bytes(&env, 3),
+            &100,
+            &zero_comm
+        ),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_break(&observer, &case_id, &BreakCode::AmountMismatch);
+
+    // Zero dispute commitment
+    assert_eq!(
+        client.try_open_dispute(&owner, &case_id, &zero_comm),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    client.open_dispute(&owner, &case_id, &sample_bytes(&env, 30));
+
+    // Zero resolution commitment
+    assert_eq!(
+        client.try_submit_resolution(&owner, &case_id, &zero_comm),
+        Err(Ok(Error::InvalidCommitment))
+    );
+}
+
+#[test]
+fn test_adversarial_wrong_case_id() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let legitimate_case_id = sample_bytes(&env, 1);
+    let bogus_case_id = sample_bytes(&env, 99);
+
+    client.create_case(
+        &legitimate_case_id,
+        &owner,
+        &None,
+        &sample_bytes(&env, 2),
+        &200,
+    );
+
+    // Access non-existent case on each endpoint
+    assert_eq!(
+        client.try_record_observation(
+            &observer,
+            &bogus_case_id,
+            &sample_bytes(&env, 3),
+            &100,
+            &sample_bytes(&env, 4)
+        ),
+        Err(Ok(Error::NotFound))
+    );
+    assert_eq!(
+        client.try_record_match(&observer, &bogus_case_id),
+        Err(Ok(Error::NotFound))
+    );
+    assert_eq!(
+        client.try_record_break(&observer, &bogus_case_id, &BreakCode::LateSettlement),
+        Err(Ok(Error::NotFound))
+    );
+    assert_eq!(
+        client.try_submit_attestation(
+            &bogus_case_id,
+            &AttestationRole::Owner,
+            &sample_bytes(&env, 10)
+        ),
+        Err(Ok(Error::NotFound))
+    );
+    assert_eq!(
+        client.try_open_dispute(&owner, &bogus_case_id, &sample_bytes(&env, 30)),
+        Err(Ok(Error::NotFound))
+    );
+    assert_eq!(
+        client.try_submit_resolution(&owner, &bogus_case_id, &sample_bytes(&env, 31)),
+        Err(Ok(Error::NotFound))
+    );
+    assert_eq!(
+        client.try_finalize_case(&bogus_case_id),
+        Err(Ok(Error::NotFound))
+    );
+    assert_eq!(
+        client.try_get_case(&bogus_case_id),
+        Err(Ok(Error::NotFound))
+    );
+}
+
+#[test]
+fn test_adversarial_unauthorized_attestation() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    // Case created without counterparty
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+
+    // Counterparty role attestation on single-party case
+    assert_eq!(
+        client.try_submit_attestation(
+            &case_id,
+            &AttestationRole::Counterparty,
+            &sample_bytes(&env, 10)
+        ),
+        Err(Ok(Error::CounterpartyRequired))
+    );
+
+    // Observer role attestation before observer is recorded
+    assert_eq!(
+        client.try_submit_attestation(
+            &case_id,
+            &AttestationRole::Observer,
+            &sample_bytes(&env, 11)
+        ),
+        Err(Ok(Error::ObserverNotRegistered))
+    );
+}
+
+#[test]
+fn test_adversarial_premature_finalization() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 2),
+        &200,
+    );
+
+    // Premature: finalize Open case
+    assert_eq!(
+        client.try_finalize_case(&case_id),
+        Err(Ok(Error::InvalidState))
+    );
+
+    // Premature: finalize Observed case
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    assert_eq!(
+        client.try_finalize_case(&case_id),
+        Err(Ok(Error::InvalidState))
+    );
+
+    // Premature: finalize Break case
+    client.record_break(&observer, &case_id, &BreakCode::AmountMismatch);
+    assert_eq!(
+        client.try_finalize_case(&case_id),
+        Err(Ok(Error::InvalidState))
+    );
+
+    // Premature: finalize Disputed case
+    client.open_dispute(&owner, &case_id, &sample_bytes(&env, 30));
+    assert_eq!(
+        client.try_finalize_case(&case_id),
+        Err(Ok(Error::InvalidState))
+    );
+
+    // Premature: finalize Resolved case without attestations
+    let res_comm = sample_bytes(&env, 31);
+    client.submit_resolution(&owner, &case_id, &res_comm);
+    client.submit_resolution(&counterparty, &case_id, &res_comm);
+    assert_eq!(
+        client.try_finalize_case(&case_id),
+        Err(Ok(Error::MissingRequiredAttestation))
+    );
+}
+
+#[test]
+fn test_adversarial_duplicate_finalization() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_match(&observer, &case_id);
+
+    client.submit_attestation(&case_id, &AttestationRole::Owner, &sample_bytes(&env, 10));
+    client.submit_attestation(
+        &case_id,
+        &AttestationRole::Observer,
+        &sample_bytes(&env, 11),
+    );
+
+    // First finalization succeeds
+    client.finalize_case(&case_id);
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Finalized);
+
+    // Adversarial: second finalization fails
+    let res = client.try_finalize_case(&case_id);
+    assert_eq!(res, Err(Ok(Error::InvalidState)));
+}
+
+#[test]
+fn test_adversarial_invalid_dispute_resolution() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let outsider = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 2),
+        &200,
+    );
+
+    // Resolution on Open case fails
+    assert_eq!(
+        client.try_submit_resolution(&owner, &case_id, &sample_bytes(&env, 31)),
+        Err(Ok(Error::InvalidState))
+    );
+
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_break(&observer, &case_id, &BreakCode::LateSettlement);
+
+    // Resolution before opening dispute fails
+    assert_eq!(
+        client.try_submit_resolution(&owner, &case_id, &sample_bytes(&env, 31)),
+        Err(Ok(Error::InvalidState))
+    );
+
+    client.open_dispute(&owner, &case_id, &sample_bytes(&env, 30));
+
+    // Resolution by outsider fails
+    assert_eq!(
+        client.try_submit_resolution(&outsider, &case_id, &sample_bytes(&env, 31)),
+        Err(Ok(Error::Unauthorized))
+    );
+
+    // Owner submits resolution A
+    client.submit_resolution(&owner, &case_id, &sample_bytes(&env, 31));
+
+    // Duplicate resolution by owner fails
+    assert_eq!(
+        client.try_submit_resolution(&owner, &case_id, &sample_bytes(&env, 31)),
+        Err(Ok(Error::ResolutionAlreadySubmitted))
+    );
+
+    // Counterparty submits mismatching resolution B
+    client.submit_resolution(&counterparty, &case_id, &sample_bytes(&env, 32));
+
+    // Status must remain Disputed due to mismatch
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Disputed);
+}

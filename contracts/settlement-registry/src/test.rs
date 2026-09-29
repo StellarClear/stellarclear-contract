@@ -1274,3 +1274,209 @@ fn test_validate_state_transition_matrix() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// AUTHORIZATION INVARIANTS TESTS
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_auth_observer_registration_and_revocation() {
+    let (env, _admin, client) = create_test_env();
+    let observer = Address::generate(&env);
+
+    // Admin can register observer
+    client.add_observer(&observer);
+    assert!(client.is_observer(&observer));
+
+    // Admin can remove observer
+    client.remove_observer(&observer);
+    assert!(!client.is_observer(&observer));
+
+    // Unregistered observer removal fails
+    let res = client.try_remove_observer(&observer);
+    assert_eq!(res, Err(Ok(Error::ObserverNotRegistered)));
+}
+
+#[test]
+fn test_auth_observation_recording_requires_registered_observer() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let unauthorized_observer = Address::generate(&env);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+
+    // Unregistered address cannot record observation
+    let res = client.try_record_observation(
+        &unauthorized_observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    assert_eq!(res, Err(Ok(Error::ObserverNotRegistered)));
+}
+
+#[test]
+fn test_auth_match_recording_requires_registered_observer() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    let unauthorized = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+
+    // Unregistered address cannot record match
+    let res = client.try_record_match(&unauthorized, &case_id);
+    assert_eq!(res, Err(Ok(Error::ObserverNotRegistered)));
+}
+
+#[test]
+fn test_auth_break_recording_requires_registered_observer() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    let unauthorized = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+
+    // Unregistered address cannot record break
+    let res = client.try_record_break(&unauthorized, &case_id, &BreakCode::AssetMismatch);
+    assert_eq!(res, Err(Ok(Error::ObserverNotRegistered)));
+}
+
+#[test]
+fn test_auth_attestation_submission_invariants() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 2),
+        &200,
+    );
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+
+    // Attesting with Observer role before observer is set fails on a case with no observer:
+    let empty_case_id = sample_bytes(&env, 9);
+    client.create_case(&empty_case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+    let res = client.try_submit_attestation(
+        &empty_case_id,
+        &AttestationRole::Observer,
+        &sample_bytes(&env, 10),
+    );
+    assert_eq!(res, Err(Ok(Error::ObserverNotRegistered)));
+
+    // Counterparty role attestation on case with no counterparty fails
+    let res = client.try_submit_attestation(
+        &empty_case_id,
+        &AttestationRole::Counterparty,
+        &sample_bytes(&env, 10),
+    );
+    assert_eq!(res, Err(Ok(Error::CounterpartyRequired)));
+}
+
+#[test]
+fn test_auth_dispute_opening_and_resolution_unauthorized_rejected() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    let unauthorized = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 2),
+        &200,
+    );
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_break(&observer, &case_id, &BreakCode::ReferenceMismatch);
+
+    // Unauthorized address cannot open dispute
+    let res = client.try_open_dispute(&unauthorized, &case_id, &sample_bytes(&env, 30));
+    assert_eq!(res, Err(Ok(Error::Unauthorized)));
+
+    // Owner opens dispute
+    client.open_dispute(&owner, &case_id, &sample_bytes(&env, 30));
+
+    // Unauthorized address cannot submit resolution
+    let res = client.try_submit_resolution(&unauthorized, &case_id, &sample_bytes(&env, 31));
+    assert_eq!(res, Err(Ok(Error::Unauthorized)));
+
+    // Observer cannot submit resolution
+    let res = client.try_submit_resolution(&observer, &case_id, &sample_bytes(&env, 31));
+    assert_eq!(res, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_auth_finalization_requires_active_registered_observer() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_match(&observer, &case_id);
+
+    client.submit_attestation(&case_id, &AttestationRole::Owner, &sample_bytes(&env, 10));
+    client.submit_attestation(
+        &case_id,
+        &AttestationRole::Observer,
+        &sample_bytes(&env, 11),
+    );
+
+    // Revoke observer before finalization
+    client.remove_observer(&observer);
+
+    // Finalization must fail because observer is no longer active
+    let res = client.try_finalize_case(&case_id);
+    assert_eq!(res, Err(Ok(Error::MissingRequiredAttestation)));
+}

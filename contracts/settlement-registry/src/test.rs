@@ -6,7 +6,7 @@ use crate::types::{
     AttestationRole, BreakCode, CaseStatus, Decision, Observation, ObservationRecord,
 };
 use crate::{SettlementRegistry, SettlementRegistryClient};
-use soroban_sdk::testutils::{Address as _, Ledger};
+use soroban_sdk::testutils::{Address as _, Events as _, Ledger};
 use soroban_sdk::{Address, BytesN, Env};
 
 fn create_test_env() -> (Env, Address, SettlementRegistryClient<'static>) {
@@ -2031,4 +2031,203 @@ fn test_adversarial_invalid_dispute_resolution() {
 
     // Status must remain Disputed due to mismatch
     assert_eq!(client.get_case(&case_id).status, CaseStatus::Disputed);
+}
+
+// ---------------------------------------------------------------------------
+// EVENT COMPLETENESS TEST SUITE
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_event_completeness_case_creation() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let case_id = sample_bytes(&env, 1);
+    let terms = sample_bytes(&env, 2);
+
+    client.create_case(&case_id, &owner, &Some(counterparty.clone()), &terms, &200);
+    assert_eq!(env.events().all().events().len(), 1);
+}
+
+#[test]
+fn test_event_completeness_observation() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    assert_eq!(env.events().all().events().len(), 1);
+}
+
+#[test]
+fn test_event_completeness_match() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+
+    client.record_match(&observer, &case_id);
+    assert_eq!(env.events().all().events().len(), 1);
+}
+
+#[test]
+fn test_event_completeness_break() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+
+    client.record_break(&observer, &case_id, &BreakCode::DestinationMismatch);
+    assert_eq!(env.events().all().events().len(), 1);
+}
+
+#[test]
+fn test_event_completeness_attestation() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 2),
+        &200,
+    );
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+
+    client.submit_attestation(&case_id, &AttestationRole::Owner, &sample_bytes(&env, 10));
+    assert_eq!(env.events().all().events().len(), 1);
+
+    client.submit_attestation(
+        &case_id,
+        &AttestationRole::Counterparty,
+        &sample_bytes(&env, 11),
+    );
+    assert_eq!(env.events().all().events().len(), 1);
+
+    client.submit_attestation(
+        &case_id,
+        &AttestationRole::Observer,
+        &sample_bytes(&env, 12),
+    );
+    assert_eq!(env.events().all().events().len(), 1);
+}
+
+#[test]
+fn test_event_completeness_dispute_and_resolution() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 2),
+        &200,
+    );
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_break(&observer, &case_id, &BreakCode::AmountMismatch);
+
+    // Dispute event
+    client.open_dispute(&owner, &case_id, &sample_bytes(&env, 30));
+    assert_eq!(env.events().all().events().len(), 1);
+
+    // Resolution submission 1 (emits ResolutionSubmitted)
+    let res_comm = sample_bytes(&env, 31);
+    client.submit_resolution(&owner, &case_id, &res_comm);
+    assert_eq!(env.events().all().events().len(), 1);
+
+    // Resolution submission 2 (emits ResolutionSubmitted AND DisputeResolved)
+    client.submit_resolution(&counterparty, &case_id, &res_comm);
+    assert_eq!(env.events().all().events().len(), 2);
+}
+
+#[test]
+fn test_event_completeness_finalization() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_match(&observer, &case_id);
+    client.submit_attestation(&case_id, &AttestationRole::Owner, &sample_bytes(&env, 10));
+    client.submit_attestation(
+        &case_id,
+        &AttestationRole::Observer,
+        &sample_bytes(&env, 11),
+    );
+
+    client.finalize_case(&case_id);
+    assert_eq!(env.events().all().events().len(), 1);
+}
+
+#[test]
+fn test_event_completeness_observer_lifecycle() {
+    let (env, _admin, client) = create_test_env();
+    let observer = Address::generate(&env);
+
+    client.add_observer(&observer);
+    assert_eq!(env.events().all().events().len(), 1);
+
+    client.remove_observer(&observer);
+    assert_eq!(env.events().all().events().len(), 1);
 }

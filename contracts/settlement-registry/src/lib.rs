@@ -64,6 +64,17 @@ pub struct SettlementRegistry;
 impl SettlementRegistry {
     /// One-time constructor initializing the contract administrator and protocol version.
     ///
+    /// # Indexer Events Emitted:
+    /// - `CaseCreated`: emitted on `create_case`
+    /// - `ObservationRecorded`: emitted on `record_observation`
+    /// - `CaseMatched`: emitted on `record_match`
+    /// - `CaseBroken`: emitted on `record_break`
+    /// - `AttestationSubmitted`: emitted on `submit_attestation`
+    /// - `DisputeOpened`: emitted on `open_dispute`
+    /// - `ResolutionSubmitted` & `DisputeResolved`: emitted on `submit_resolution`
+    /// - `CaseFinalized`: emitted on `finalize_case`
+    /// - `ObserverAdded` & `ObserverRemoved`: emitted on observer registration lifecycle
+    ///
     /// # Settlement Lifecycle Transitions Supported:
     /// - Open -> Observed
     /// - Observed -> Matched

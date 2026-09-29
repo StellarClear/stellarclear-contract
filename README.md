@@ -1,8 +1,11 @@
 # StellarClear Contract (`stellarclear-contract`)
 
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
+[![CI](https://github.com/StellarClear/stellarclear-contract/actions/workflows/ci.yml/badge.svg)](./.github/workflows/ci.yml)
+
 StellarClear is an open-source, Stellar-native settlement evidence and reconciliation protocol that compares expected settlement instructions with observed Stellar settlement, records machine-readable reconciliation outcomes, and anchors verifiable evidence and attestations on Soroban.
 
-This repository contains the smart contract layer (`SettlementRegistry`) for the protocol.
+This repository contains the smart contract layer (`SettlementRegistry`) for the protocol. Off-chain SDK/API/indexer/matcher live in [`StellarClear/stellarclear`](https://github.com/StellarClear/stellarclear).
 
 ---
 
@@ -113,3 +116,19 @@ The optimized contract artifact will be generated at:
 
 > [!WARNING]
 > **UNAUDITED SOFTWARE**: This smart contract is under active development and has not undergone formal verification or an independent security audit. Do not use this contract in production environments handling real financial value without prior audit.
+
+---
+
+## Funding (Drips)
+
+This repo is claimable on [Drips](https://www.drips.network). Ownership is proven via `FUNDING.json` on the default branch (`main`).
+
+> `FUNDING.json` currently contains a placeholder `0x0000...` address. Maintainers: replace it with the project owner address during the Drips claim flow.
+
+## Contributing
+
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+
+## License
+
+Apache-2.0 — see [`LICENSE`](./LICENSE).

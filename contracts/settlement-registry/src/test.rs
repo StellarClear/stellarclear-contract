@@ -2440,3 +2440,305 @@ fn test_invariant_finalization_event_matches_stored_state() {
     assert_eq!(stored.status, CaseStatus::Finalized);
     assert_eq!(stored.finalized_at_ledger, Some(175));
 }
+
+// ---------------------------------------------------------------------------
+// BOUNDARY AND DUPLICATE-STATE FUZZ COVERAGE TESTS
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_boundary_empty_commitments_across_all_calls() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let zero = zero_bytes(&env);
+    let normal = sample_bytes(&env, 1);
+
+    // Empty case_id in create_case
+    assert_eq!(
+        client.try_create_case(&zero, &owner, &None, &normal, &200),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    // Empty terms_commitment in create_case
+    assert_eq!(
+        client.try_create_case(&normal, &owner, &None, &zero, &200),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    // Setup valid case
+    client.create_case(&normal, &owner, &None, &sample_bytes(&env, 2), &200);
+
+    // Empty tx_hash in observation
+    assert_eq!(
+        client.try_record_observation(&observer, &normal, &zero, &100, &sample_bytes(&env, 4)),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    // Empty observation_commitment in observation
+    assert_eq!(
+        client.try_record_observation(&observer, &normal, &sample_bytes(&env, 3), &100, &zero),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    // Empty attestation commitment
+    assert_eq!(
+        client.try_submit_attestation(&normal, &AttestationRole::Owner, &zero),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    // Empty dispute commitment
+    assert_eq!(
+        client.try_open_dispute(&owner, &normal, &zero),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    // Empty resolution commitment
+    assert_eq!(
+        client.try_submit_resolution(&owner, &normal, &zero),
+        Err(Ok(Error::InvalidCommitment))
+    );
+}
+
+#[test]
+fn test_boundary_maximum_size_supported_values() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    // Maximum byte value (all 0xFF)
+    let max_bytes = sample_bytes(&env, 0xFF);
+    let max_expiry = u32::MAX;
+
+    // Case creation with max byte commitments and max expiry
+    client.create_case(
+        &max_bytes,
+        &owner,
+        &Some(counterparty.clone()),
+        &max_bytes,
+        &max_expiry,
+    );
+
+    let case = client.get_case(&max_bytes);
+    assert_eq!(case.terms_commitment, max_bytes);
+    assert_eq!(case.expires_at_ledger, max_expiry);
+
+    // Observation with max byte values
+    client.record_observation(&observer, &max_bytes, &max_bytes, &100, &max_bytes);
+
+    // Match with max byte values
+    client.record_match(&observer, &max_bytes);
+
+    // Attestation with max byte values
+    client.submit_attestation(&max_bytes, &AttestationRole::Owner, &max_bytes);
+    client.submit_attestation(&max_bytes, &AttestationRole::Observer, &max_bytes);
+
+    // Finalize case
+    client.finalize_case(&max_bytes);
+    assert_eq!(client.get_case(&max_bytes).status, CaseStatus::Finalized);
+}
+
+#[test]
+fn test_boundary_repeated_identical_calls() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    // Repeated add_observer
+    assert_eq!(
+        client.try_add_observer(&observer),
+        Err(Ok(Error::ObserverAlreadyRegistered))
+    );
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+
+    // Repeated create_case
+    assert_eq!(
+        client.try_create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200),
+        Err(Ok(Error::CaseAlreadyExists))
+    );
+
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+
+    // Repeated observation
+    assert_eq!(
+        client.try_record_observation(
+            &observer,
+            &case_id,
+            &sample_bytes(&env, 3),
+            &100,
+            &sample_bytes(&env, 4),
+        ),
+        Err(Ok(Error::InvalidState))
+    );
+
+    client.record_match(&observer, &case_id);
+
+    // Repeated match
+    assert_eq!(
+        client.try_record_match(&observer, &case_id),
+        Err(Ok(Error::InvalidState))
+    );
+
+    // Repeated attestation
+    client.submit_attestation(&case_id, &AttestationRole::Owner, &sample_bytes(&env, 10));
+    assert_eq!(
+        client.try_submit_attestation(&case_id, &AttestationRole::Owner, &sample_bytes(&env, 10)),
+        Err(Ok(Error::AttestationAlreadyExists))
+    );
+
+    client.submit_attestation(
+        &case_id,
+        &AttestationRole::Observer,
+        &sample_bytes(&env, 11),
+    );
+    client.finalize_case(&case_id);
+
+    // Repeated finalization
+    assert_eq!(
+        client.try_finalize_case(&case_id),
+        Err(Ok(Error::InvalidState))
+    );
+}
+
+#[test]
+fn test_boundary_repeated_conflicting_calls() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+
+    // Record Match then attempt Break
+    client.record_match(&observer, &case_id);
+    assert_eq!(
+        client.try_record_break(&observer, &case_id, &BreakCode::DestinationMismatch),
+        Err(Ok(Error::InvalidState))
+    );
+
+    // Attempt to open dispute on matched case
+    assert_eq!(
+        client.try_open_dispute(&owner, &case_id, &sample_bytes(&env, 30)),
+        Err(Ok(Error::InvalidState))
+    );
+}
+
+#[test]
+fn test_boundary_already_finalized_case_rejects_all_mutations() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_match(&observer, &case_id);
+    client.submit_attestation(&case_id, &AttestationRole::Owner, &sample_bytes(&env, 10));
+    client.submit_attestation(
+        &case_id,
+        &AttestationRole::Observer,
+        &sample_bytes(&env, 11),
+    );
+    client.finalize_case(&case_id);
+
+    // Verify all endpoints reject on finalized case
+    assert_eq!(
+        client.try_record_observation(
+            &observer,
+            &case_id,
+            &sample_bytes(&env, 5),
+            &100,
+            &sample_bytes(&env, 6),
+        ),
+        Err(Ok(Error::InvalidState))
+    );
+    assert_eq!(
+        client.try_record_match(&observer, &case_id),
+        Err(Ok(Error::InvalidState))
+    );
+    assert_eq!(
+        client.try_record_break(&observer, &case_id, &BreakCode::LateSettlement),
+        Err(Ok(Error::InvalidState))
+    );
+    assert_eq!(
+        client.try_open_dispute(&owner, &case_id, &sample_bytes(&env, 30)),
+        Err(Ok(Error::InvalidState))
+    );
+    assert_eq!(
+        client.try_submit_resolution(&owner, &case_id, &sample_bytes(&env, 31)),
+        Err(Ok(Error::InvalidState))
+    );
+    assert_eq!(
+        client.try_finalize_case(&case_id),
+        Err(Ok(Error::InvalidState))
+    );
+}
+
+#[test]
+fn test_boundary_already_resolved_dispute_rejects_further_resolution() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 2),
+        &200,
+    );
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_break(&observer, &case_id, &BreakCode::AmountMismatch);
+    client.open_dispute(&owner, &case_id, &sample_bytes(&env, 30));
+
+    let res_comm = sample_bytes(&env, 31);
+    client.submit_resolution(&owner, &case_id, &res_comm);
+    client.submit_resolution(&counterparty, &case_id, &res_comm);
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Resolved);
+
+    // Attempt resolution on already resolved case
+    assert_eq!(
+        client.try_submit_resolution(&owner, &case_id, &sample_bytes(&env, 32)),
+        Err(Ok(Error::InvalidState))
+    );
+    assert_eq!(
+        client.try_submit_resolution(&counterparty, &case_id, &sample_bytes(&env, 32)),
+        Err(Ok(Error::InvalidState))
+    );
+}

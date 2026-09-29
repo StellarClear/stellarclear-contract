@@ -1,3 +1,27 @@
+//! # SettlementRegistry Contract
+//!
+//! On-chain settlement evidence, observation registry, and reconciliation state machine for StellarClear.
+//!
+//! ## Security Invariants & Role Permissions
+//! - **Case Creation**: Only authenticated `owner` with non-zero 32-byte `case_id`, non-zero `terms_commitment`, future expiration, and optional distinct `counterparty`.
+//! - **Observer Registration**: Only contract `admin` can register or revoke observer addresses.
+//! - **Observation Recording**: Only active, registered `observer` on `Open` cases with non-zero `tx_hash` and `observation_commitment`.
+//! - **Reconciliation Decisions**: Only registered `observer` on `Observed` cases to record `Matched` or `Break` with standardized `BreakCode`.
+//! - **Cryptographic Attestations**:
+//!   - `Owner`: requires `owner.require_auth()`
+//!   - `Counterparty`: requires `counterparty.require_auth()`
+//!   - `Observer`: requires active registered `observer.require_auth()` matching case observer.
+//!   All attestations require non-zero 32-byte commitments.
+//! - **Dispute Initiation**: Only `owner` or `counterparty` on `Break` cases with non-zero `dispute_commitment`.
+//! - **Dispute Resolution**: `owner` and `counterparty` must independently submit identical non-zero resolution commitments to transition to `Resolved`.
+//! - **Finalization**: Only `owner` on `Matched` cases (Owner + Observer attestations) or `Resolved` cases (Owner + Counterparty + Observer attestations).
+//! - **Terminal Immutability**: Finalized cases are permanently immutable with no mutation methods or admin overrides.
+//!
+//! ## Security Assumptions & Disclaimer
+//! - SHA-256 commitments represent deterministic off-chain pre-image calculations.
+//! - Observers are trusted to accurately report on-chain ledger activity.
+//! - **UNAUDITED SOFTWARE**: Prototype reference implementation under active development. Not audited for production value transfer.
+
 #![no_std]
 
 pub mod auth;

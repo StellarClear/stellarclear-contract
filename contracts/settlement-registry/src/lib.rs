@@ -38,6 +38,15 @@ pub struct SettlementRegistry;
 #[contractimpl]
 impl SettlementRegistry {
     /// One-time constructor initializing the contract administrator and protocol version.
+    ///
+    /// # Settlement Lifecycle Transitions Supported:
+    /// - Open -> Observed
+    /// - Observed -> Matched
+    /// - Observed -> Break
+    /// - Break -> Disputed
+    /// - Disputed -> Resolved
+    /// - Matched -> Finalized
+    /// - Resolved -> Finalized
     pub fn __constructor(env: Env, admin: Address) -> Result<(), Error> {
         if has_admin(&env) {
             return Err(Error::AlreadyInitialized);

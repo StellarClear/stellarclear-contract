@@ -993,3 +993,284 @@ fn test_not_found_on_unknown_case() {
         Err(Ok(Error::NotFound))
     );
 }
+
+// ---------------------------------------------------------------------------
+// DEDICATED LIFECYCLE TRANSITION COVERAGE (LEGAL & ILLEGAL)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_legal_transition_open_to_observed() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Open);
+
+    // Open -> Observed
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    let case = client.get_case(&case_id);
+    assert_eq!(case.status, CaseStatus::Observed);
+}
+
+#[test]
+fn test_legal_transition_observed_to_matched() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Observed);
+
+    // Observed -> Matched
+    client.record_match(&observer, &case_id);
+    let case = client.get_case(&case_id);
+    assert_eq!(case.status, CaseStatus::Matched);
+    assert_eq!(case.decision, Decision::Matched);
+}
+
+#[test]
+fn test_legal_transition_observed_to_break() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Observed);
+
+    // Observed -> Break
+    client.record_break(&observer, &case_id, &BreakCode::DestinationMismatch);
+    let case = client.get_case(&case_id);
+    assert_eq!(case.status, CaseStatus::Break);
+    assert_eq!(
+        case.decision,
+        Decision::Break(BreakCode::DestinationMismatch)
+    );
+}
+
+#[test]
+fn test_legal_transition_break_to_disputed() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 2),
+        &200,
+    );
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_break(&observer, &case_id, &BreakCode::LateSettlement);
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Break);
+
+    // Break -> Disputed
+    client.open_dispute(&owner, &case_id, &sample_bytes(&env, 30));
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Disputed);
+}
+
+#[test]
+fn test_legal_transition_disputed_to_resolved() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 2),
+        &200,
+    );
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_break(&observer, &case_id, &BreakCode::AmountMismatch);
+    client.open_dispute(&owner, &case_id, &sample_bytes(&env, 30));
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Disputed);
+
+    // Disputed -> Resolved (after both parties submit matching commitments)
+    let res_comm = sample_bytes(&env, 31);
+    client.submit_resolution(&owner, &case_id, &res_comm);
+    client.submit_resolution(&counterparty, &case_id, &res_comm);
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Resolved);
+}
+
+#[test]
+fn test_legal_transition_matched_to_finalized() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_match(&observer, &case_id);
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Matched);
+
+    // Required attestations
+    client.submit_attestation(&case_id, &AttestationRole::Owner, &sample_bytes(&env, 10));
+    client.submit_attestation(
+        &case_id,
+        &AttestationRole::Observer,
+        &sample_bytes(&env, 11),
+    );
+
+    // Matched -> Finalized
+    env.ledger().set_sequence_number(150);
+    client.finalize_case(&case_id);
+    let case = client.get_case(&case_id);
+    assert_eq!(case.status, CaseStatus::Finalized);
+    assert_eq!(case.finalized_at_ledger, Some(150));
+}
+
+#[test]
+fn test_legal_transition_resolved_to_finalized() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 2),
+        &200,
+    );
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_break(&observer, &case_id, &BreakCode::FailedTransaction);
+    client.open_dispute(&counterparty, &case_id, &sample_bytes(&env, 30));
+
+    let res_comm = sample_bytes(&env, 31);
+    client.submit_resolution(&owner, &case_id, &res_comm);
+    client.submit_resolution(&counterparty, &case_id, &res_comm);
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Resolved);
+
+    // Required attestations
+    client.submit_attestation(&case_id, &AttestationRole::Owner, &sample_bytes(&env, 10));
+    client.submit_attestation(
+        &case_id,
+        &AttestationRole::Counterparty,
+        &sample_bytes(&env, 11),
+    );
+    client.submit_attestation(
+        &case_id,
+        &AttestationRole::Observer,
+        &sample_bytes(&env, 12),
+    );
+
+    // Resolved -> Finalized
+    env.ledger().set_sequence_number(160);
+    client.finalize_case(&case_id);
+    let case = client.get_case(&case_id);
+    assert_eq!(case.status, CaseStatus::Finalized);
+    assert_eq!(case.finalized_at_ledger, Some(160));
+}
+
+#[test]
+fn test_validate_state_transition_matrix() {
+    use crate::auth::validate_state_transition;
+
+    let all_statuses = [
+        CaseStatus::Open,
+        CaseStatus::Observed,
+        CaseStatus::Matched,
+        CaseStatus::Break,
+        CaseStatus::Disputed,
+        CaseStatus::Resolved,
+        CaseStatus::Finalized,
+    ];
+
+    for &from in &all_statuses {
+        for &to in &all_statuses {
+            let is_legal = matches!(
+                (from, to),
+                (CaseStatus::Open, CaseStatus::Observed)
+                    | (CaseStatus::Observed, CaseStatus::Matched)
+                    | (CaseStatus::Observed, CaseStatus::Break)
+                    | (CaseStatus::Break, CaseStatus::Disputed)
+                    | (CaseStatus::Disputed, CaseStatus::Resolved)
+                    | (CaseStatus::Matched, CaseStatus::Finalized)
+                    | (CaseStatus::Resolved, CaseStatus::Finalized)
+            );
+
+            let res = validate_state_transition(from, to);
+            if is_legal {
+                assert_eq!(
+                    res,
+                    Ok(()),
+                    "Expected legal transition from {:?} to {:?}",
+                    from,
+                    to
+                );
+            } else {
+                assert_eq!(
+                    res,
+                    Err(Error::InvalidState),
+                    "Expected illegal transition from {:?} to {:?}",
+                    from,
+                    to
+                );
+            }
+        }
+    }
+}

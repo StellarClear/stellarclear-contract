@@ -2231,3 +2231,212 @@ fn test_event_completeness_observer_lifecycle() {
     client.remove_observer(&observer);
     assert_eq!(env.events().all().events().len(), 1);
 }
+
+// ---------------------------------------------------------------------------
+// EVENT AND STATE INVARIANTS TESTS
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_invariant_case_created_event_matches_stored_state() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let case_id = sample_bytes(&env, 1);
+    let terms_commitment = sample_bytes(&env, 2);
+    let expires_at = 250;
+
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &terms_commitment,
+        &expires_at,
+    );
+
+    let stored = client.get_case(&case_id);
+    assert_eq!(stored.owner, owner);
+    assert_eq!(stored.counterparty, Some(counterparty));
+    assert_eq!(stored.terms_commitment, terms_commitment);
+    assert_eq!(stored.expires_at_ledger, expires_at);
+    assert_eq!(stored.status, CaseStatus::Open);
+}
+
+#[test]
+fn test_invariant_observation_event_matches_stored_state() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    let terms = sample_bytes(&env, 2);
+    let tx_hash = sample_bytes(&env, 3);
+    let obs_comm = sample_bytes(&env, 4);
+    let obs_ledger = 100;
+
+    client.create_case(&case_id, &owner, &None, &terms, &200);
+    client.record_observation(&observer, &case_id, &tx_hash, &obs_ledger, &obs_comm);
+
+    let stored = client.get_case(&case_id);
+    assert_eq!(stored.status, CaseStatus::Observed);
+    assert_eq!(
+        stored.observation,
+        Observation::Observed(ObservationRecord {
+            tx_hash: tx_hash.clone(),
+            observation_commitment: obs_comm.clone(),
+            observed_ledger: obs_ledger,
+        })
+    );
+}
+
+#[test]
+fn test_invariant_match_and_break_event_matches_stored_state() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    // Matched invariant
+    let case_id1 = sample_bytes(&env, 1);
+    client.create_case(&case_id1, &owner, &None, &sample_bytes(&env, 2), &200);
+    client.record_observation(
+        &observer,
+        &case_id1,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_match(&observer, &case_id1);
+
+    let stored1 = client.get_case(&case_id1);
+    assert_eq!(stored1.status, CaseStatus::Matched);
+    assert_eq!(stored1.decision, Decision::Matched);
+
+    // Break invariant
+    let case_id2 = sample_bytes(&env, 5);
+    client.create_case(&case_id2, &owner, &None, &sample_bytes(&env, 6), &200);
+    client.record_observation(
+        &observer,
+        &case_id2,
+        &sample_bytes(&env, 7),
+        &100,
+        &sample_bytes(&env, 8),
+    );
+    client.record_break(&observer, &case_id2, &BreakCode::DestinationMismatch);
+
+    let stored2 = client.get_case(&case_id2);
+    assert_eq!(stored2.status, CaseStatus::Break);
+    assert_eq!(
+        stored2.decision,
+        Decision::Break(BreakCode::DestinationMismatch)
+    );
+}
+
+#[test]
+fn test_invariant_attestation_event_matches_stored_state() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 2),
+        &200,
+    );
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+
+    let owner_comm = sample_bytes(&env, 10);
+    client.submit_attestation(&case_id, &AttestationRole::Owner, &owner_comm);
+
+    let stored_att = client.get_attestation(&case_id, &owner).unwrap();
+    assert_eq!(stored_att.role, AttestationRole::Owner);
+    assert_eq!(stored_att.commitment, owner_comm);
+    assert_eq!(stored_att.attested_at_ledger, 100);
+}
+
+#[test]
+fn test_invariant_dispute_and_resolution_event_matches_stored_state() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 2),
+        &200,
+    );
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_break(&observer, &case_id, &BreakCode::AmountMismatch);
+
+    let dispute_comm = sample_bytes(&env, 30);
+    client.open_dispute(&owner, &case_id, &dispute_comm);
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Disputed);
+
+    let res_comm = sample_bytes(&env, 31);
+    client.submit_resolution(&owner, &case_id, &res_comm);
+    client.submit_resolution(&counterparty, &case_id, &res_comm);
+
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Resolved);
+    assert_eq!(
+        client.get_resolution(&case_id, &owner),
+        Some(res_comm.clone())
+    );
+    assert_eq!(
+        client.get_resolution(&case_id, &counterparty),
+        Some(res_comm)
+    );
+}
+
+#[test]
+fn test_invariant_finalization_event_matches_stored_state() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_match(&observer, &case_id);
+    client.submit_attestation(&case_id, &AttestationRole::Owner, &sample_bytes(&env, 10));
+    client.submit_attestation(
+        &case_id,
+        &AttestationRole::Observer,
+        &sample_bytes(&env, 11),
+    );
+
+    env.ledger().set_sequence_number(175);
+    client.finalize_case(&case_id);
+
+    let stored = client.get_case(&case_id);
+    assert_eq!(stored.status, CaseStatus::Finalized);
+    assert_eq!(stored.finalized_at_ledger, Some(175));
+}

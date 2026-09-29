@@ -156,7 +156,13 @@ impl SettlementRegistry {
         };
 
         set_case_record(&env, &case_id, &case);
-        emit_case_created(&env, &case_id, &owner, &counterparty, expires_at_ledger);
+        emit_case_created(
+            &env,
+            &case_id,
+            &case.owner,
+            &case.counterparty,
+            case.expires_at_ledger,
+        );
         Ok(())
     }
 
@@ -196,7 +202,9 @@ impl SettlementRegistry {
 
         set_case_record(&env, &case_id, &case);
         set_case_observer(&env, &case_id, &observer);
-        emit_observation_recorded(&env, &case_id, &observer, &tx_hash, observed_ledger);
+        if let Observation::Observed(ref obs) = case.observation {
+            emit_observation_recorded(&env, &case_id, &observer, &obs.tx_hash, obs.observed_ledger);
+        }
         Ok(())
     }
 

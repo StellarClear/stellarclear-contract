@@ -28,6 +28,31 @@ pub fn require_non_zero_commitment(commitment: &BytesN<32>) -> Result<(), Error>
     Ok(())
 }
 
+/// Validates case identity commitment (must be non-zero).
+pub fn validate_case_identity(case_id: &BytesN<32>) -> Result<(), Error> {
+    require_non_zero_commitment(case_id)
+}
+
+/// Validates terms commitment (must be non-zero 32-byte commitment).
+pub fn validate_terms_commitment(terms_commitment: &BytesN<32>) -> Result<(), Error> {
+    require_non_zero_commitment(terms_commitment)
+}
+
+/// Validates observation evidence (both transaction hash and observation commitment must be non-zero).
+pub fn validate_observation_evidence(
+    tx_hash: &BytesN<32>,
+    observation_commitment: &BytesN<32>,
+) -> Result<(), Error> {
+    require_non_zero_commitment(tx_hash)?;
+    require_non_zero_commitment(observation_commitment)?;
+    Ok(())
+}
+
+/// Validates attestation commitment (must be non-zero).
+pub fn validate_attestation_commitment(commitment: &BytesN<32>) -> Result<(), Error> {
+    require_non_zero_commitment(commitment)
+}
+
 /// Centralized validator for legal settlement case state transitions.
 pub fn validate_state_transition(current: CaseStatus, next: CaseStatus) -> Result<(), Error> {
     let legal = matches!(

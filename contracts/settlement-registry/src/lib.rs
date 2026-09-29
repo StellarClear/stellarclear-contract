@@ -11,7 +11,8 @@ mod test;
 
 use auth::{
     require_admin_auth, require_non_zero_commitment, require_observer_auth,
-    validate_state_transition,
+    validate_attestation_commitment, validate_case_identity, validate_observation_evidence,
+    validate_state_transition, validate_terms_commitment,
 };
 use errors::Error;
 use events::{
@@ -89,11 +90,12 @@ impl SettlementRegistry {
     ) -> Result<(), Error> {
         owner.require_auth();
 
+        validate_case_identity(&case_id)?;
+        validate_terms_commitment(&terms_commitment)?;
+
         if has_case_record(&env, &case_id) {
             return Err(Error::CaseAlreadyExists);
         }
-
-        require_non_zero_commitment(&terms_commitment)?;
 
         let current_ledger = env.ledger().sequence();
         if expires_at_ledger <= current_ledger {
@@ -133,6 +135,8 @@ impl SettlementRegistry {
         observation_commitment: BytesN<32>,
     ) -> Result<(), Error> {
         require_observer_auth(&env, &observer)?;
+        validate_case_identity(&case_id)?;
+        validate_observation_evidence(&tx_hash, &observation_commitment)?;
 
         let mut case = get_case_record(&env, &case_id).ok_or(Error::NotFound)?;
         validate_state_transition(case.status, CaseStatus::Observed)?;
@@ -140,8 +144,6 @@ impl SettlementRegistry {
         if case.observation != Observation::None {
             return Err(Error::InvalidState);
         }
-
-        require_non_zero_commitment(&observation_commitment)?;
 
         let current_ledger = env.ledger().sequence();
         if observed_ledger == 0 || observed_ledger > current_ledger {
@@ -166,6 +168,7 @@ impl SettlementRegistry {
     /// Observer-authorized: records a matched reconciliation decision.
     pub fn record_match(env: Env, observer: Address, case_id: BytesN<32>) -> Result<(), Error> {
         require_observer_auth(&env, &observer)?;
+        validate_case_identity(&case_id)?;
 
         let mut case = get_case_record(&env, &case_id).ok_or(Error::NotFound)?;
         validate_state_transition(case.status, CaseStatus::Matched)?;
@@ -190,6 +193,7 @@ impl SettlementRegistry {
         break_code: BreakCode,
     ) -> Result<(), Error> {
         require_observer_auth(&env, &observer)?;
+        validate_case_identity(&case_id)?;
 
         let mut case = get_case_record(&env, &case_id).ok_or(Error::NotFound)?;
         validate_state_transition(case.status, CaseStatus::Break)?;
@@ -213,8 +217,10 @@ impl SettlementRegistry {
         role: AttestationRole,
         commitment: BytesN<32>,
     ) -> Result<(), Error> {
+        validate_case_identity(&case_id)?;
+        validate_attestation_commitment(&commitment)?;
+
         let case = get_case_record(&env, &case_id).ok_or(Error::NotFound)?;
-        require_non_zero_commitment(&commitment)?;
 
         let attestor: Address = match role {
             AttestationRole::Owner => {
@@ -260,6 +266,8 @@ impl SettlementRegistry {
         dispute_commitment: BytesN<32>,
     ) -> Result<(), Error> {
         initiator.require_auth();
+        validate_case_identity(&case_id)?;
+        require_non_zero_commitment(&dispute_commitment)?;
 
         let mut case = get_case_record(&env, &case_id).ok_or(Error::NotFound)?;
 
@@ -271,7 +279,6 @@ impl SettlementRegistry {
         }
 
         validate_state_transition(case.status, CaseStatus::Disputed)?;
-        require_non_zero_commitment(&dispute_commitment)?;
 
         case.status = CaseStatus::Disputed;
         set_case_record(&env, &case_id, &case);
@@ -287,6 +294,8 @@ impl SettlementRegistry {
         resolution_commitment: BytesN<32>,
     ) -> Result<(), Error> {
         resolver.require_auth();
+        validate_case_identity(&case_id)?;
+        require_non_zero_commitment(&resolution_commitment)?;
 
         let mut case = get_case_record(&env, &case_id).ok_or(Error::NotFound)?;
         if case.status != CaseStatus::Disputed {
@@ -303,8 +312,6 @@ impl SettlementRegistry {
         if has_resolution_record(&env, &case_id, &resolver) {
             return Err(Error::ResolutionAlreadySubmitted);
         }
-
-        require_non_zero_commitment(&resolution_commitment)?;
 
         set_resolution_record(&env, &case_id, &resolver, &resolution_commitment);
         emit_resolution_submitted(&env, &case_id, &resolver, &resolution_commitment);
@@ -331,6 +338,7 @@ impl SettlementRegistry {
 
     /// Owner-authorized: finalizes a matched or resolved settlement case.
     pub fn finalize_case(env: Env, case_id: BytesN<32>) -> Result<(), Error> {
+        validate_case_identity(&case_id)?;
         let mut case = get_case_record(&env, &case_id).ok_or(Error::NotFound)?;
         case.owner.require_auth();
 

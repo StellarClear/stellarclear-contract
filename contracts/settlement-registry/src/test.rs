@@ -1480,3 +1480,90 @@ fn test_auth_finalization_requires_active_registered_observer() {
     let res = client.try_finalize_case(&case_id);
     assert_eq!(res, Err(Ok(Error::MissingRequiredAttestation)));
 }
+
+// ---------------------------------------------------------------------------
+// COMMITMENT HARDENING & MALFORMED EVIDENCE REJECTION TESTS
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_validation_zero_case_id_rejected_on_all_endpoints() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+    let zero_case = zero_bytes(&env);
+
+    // create_case
+    assert_eq!(
+        client.try_create_case(&zero_case, &owner, &None, &sample_bytes(&env, 1), &200),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    // record_observation
+    assert_eq!(
+        client.try_record_observation(
+            &observer,
+            &zero_case,
+            &sample_bytes(&env, 1),
+            &100,
+            &sample_bytes(&env, 2)
+        ),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    // record_match
+    assert_eq!(
+        client.try_record_match(&observer, &zero_case),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    // record_break
+    assert_eq!(
+        client.try_record_break(&observer, &zero_case, &BreakCode::AmountMismatch),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    // submit_attestation
+    assert_eq!(
+        client.try_submit_attestation(&zero_case, &AttestationRole::Owner, &sample_bytes(&env, 1)),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    // open_dispute
+    assert_eq!(
+        client.try_open_dispute(&owner, &zero_case, &sample_bytes(&env, 1)),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    // submit_resolution
+    assert_eq!(
+        client.try_submit_resolution(&owner, &zero_case, &sample_bytes(&env, 1)),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    // finalize_case
+    assert_eq!(
+        client.try_finalize_case(&zero_case),
+        Err(Ok(Error::InvalidCommitment))
+    );
+}
+
+#[test]
+fn test_validation_zero_tx_hash_rejected() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 2), &200);
+
+    let res = client.try_record_observation(
+        &observer,
+        &case_id,
+        &zero_bytes(&env),
+        &100,
+        &sample_bytes(&env, 3),
+    );
+    assert_eq!(res, Err(Ok(Error::InvalidCommitment)));
+}

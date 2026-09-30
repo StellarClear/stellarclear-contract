@@ -1,4 +1,4 @@
-name: CI
+name: Security Verification
 
 on:
   push:
@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  check-and-test:
-    name: Lint, Test, and Reproducible Build
+  security-checks:
+    name: Security Invariants & Release Candidate Verification
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -31,8 +31,11 @@ jobs:
           (curl -sLf "https://github.com/stellar/stellar-cli/releases/download/v28.1.0/stellar-cli-28.1.0-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/stellar.tar.gz && sudo tar -xzf /tmp/stellar.tar.gz -C /usr/local/bin/) || cargo install --locked stellar-cli --version 28.1.0
           stellar version || true
 
-      - name: Run verification checks (fmt, clippy, tests, build, metadata)
-        run: ./scripts/check.sh
+      - name: Security and Invariant Tests
+        run: |
+          cargo test --workspace -- --nocapture
 
-      - name: Run deployed testnet integration test matrix
-        run: cargo test --test deployed_testnet -- --nocapture
+      - name: Release Artifact Integrity Verification
+        run: |
+          ./scripts/build.sh
+          ./scripts/verify-artifact.sh

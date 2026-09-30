@@ -1,6 +1,6 @@
-# SettlementRegistry Release Process & Verification Checklist
+# SettlementRegistry Release Process & Security Review Checklist
 
-This document specifies the complete, end-to-end production and testnet release procedure for the `SettlementRegistry` Soroban smart contract.
+This document details the complete contract release, security review, reproducible artifact packaging, and deployment verification procedures for the `SettlementRegistry` Soroban smart contract.
 
 ---
 
@@ -13,7 +13,7 @@ This document specifies the complete, end-to-end production and testnet release 
 
 ---
 
-## 1. Production / Testnet Release Checklist
+## 1. Security Review & Release-Candidate Checklist
 
 Before tagging or publishing any release, maintainers and deployers must complete and verify every step of this checklist:
 
@@ -25,7 +25,7 @@ Before tagging or publishing any release, maintainers and deployers must complet
 - [ ] **Clippy Passes**: Linter passes cleanly with zero warnings (`cargo clippy --workspace --all-targets --all-features -- -D warnings`).
 - [ ] **WASM Builds**: Deterministic WebAssembly binary compiles successfully with `wasm32v1-none` target (`./scripts/build.sh`).
 - [ ] **Checksum Recorded**: SHA-256 hash generated and recorded in `artifacts/settlement_registry.wasm.sha256` and release manifest.
-- [ ] **Release Version Recorded**: Workspace version in `Cargo.toml` matches tag and release notes.
+- [ ] **Release Version Recorded**: Workspace version in `Cargo.toml` matches tag and release notes (`0.1.0`).
 
 ### Deployment & Post-Deployment Verification
 

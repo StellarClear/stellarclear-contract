@@ -2,7 +2,7 @@
 set -euo pipefail
 
 echo "======================================================"
-echo " Running Quality, Verification, and Release Checks"
+echo " Running Quality, Security, and Release Verification Checks"
 echo "======================================================"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -43,11 +43,10 @@ if [ "$CALCULATED_HASH" != "$RECORDED_HASH" ]; then
 fi
 echo "WASM Checksum verified: $CALCULATED_HASH"
 
-echo "6. Verifying release metadata consistency..."
-WORKSPACE_VERSION="$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f 2)"
-echo "Verified workspace version consistency: $WORKSPACE_VERSION"
+echo "6. Verifying release artifact chain and metadata..."
+./scripts/verify-artifact.sh
 
 echo ""
 echo "======================================================"
-echo "All quality, build, and release verification checks passed."
+echo "All quality, security, and release-candidate checks passed."
 echo "======================================================"

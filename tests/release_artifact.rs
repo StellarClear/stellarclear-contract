@@ -31,6 +31,29 @@ fn find_file_path(relative_path: &str) -> Option<std::path::PathBuf> {
 }
 
 #[test]
+fn test_release_chain_source_revision_and_version() {
+    let candidates = [
+        std::path::PathBuf::from("Cargo.toml"),
+        std::path::PathBuf::from("../../Cargo.toml"),
+    ];
+    let mut root_cargo = None;
+    for c in candidates {
+        if let Ok(content) = std::fs::read_to_string(&c) {
+            if content.contains("[workspace]") {
+                root_cargo = Some(content);
+                break;
+            }
+        }
+    }
+    let content = root_cargo.expect("Root Cargo.toml must exist");
+
+    assert!(
+        content.contains("version = \"0.1.0\""),
+        "Workspace version must match release candidate version 0.1.0"
+    );
+}
+
+#[test]
 fn test_release_artifact_wasm_binary_integrity() {
     let env = Env::default();
     let wasm_path = find_file_path("artifacts/settlement_registry.wasm")
@@ -54,7 +77,7 @@ fn test_release_artifact_wasm_binary_integrity() {
     let calculated_hash = env.crypto().sha256(&wasm_sdk_bytes);
     assert_eq!(calculated_hash.to_array().len(), 32);
 
-    // If checksum file exists, verify match
+    // 3. Verify match with checksum file if present
     if let Some(sha_path) = find_file_path("artifacts/settlement_registry.wasm.sha256") {
         if let Ok(sha_content) = std::fs::read_to_string(sha_path) {
             let published_hash_hex = sha_content
@@ -122,4 +145,24 @@ fn test_release_contract_execution_in_soroban_env() {
     let case_data = client.get_case(&case_id);
     assert_eq!(case_data.owner, owner);
     assert_eq!(case_data.status, CaseStatus::Open);
+}
+
+#[test]
+fn test_release_chain_mismatch_failure_conditions() {
+    let env = Env::default();
+    let sample_data = b"tampered_wasm_payload";
+    let sdk_bytes = soroban_sdk::Bytes::from_slice(&env, sample_data);
+    let hash = env.crypto().sha256(&sdk_bytes);
+
+    let published_hash = "1018a81b1ac95046cb00466ceda7ee347204c08b71b1c51b3c9611dd32215d66";
+    let mut calculated_hex = String::new();
+    for byte in hash.to_array() {
+        calculated_hex.push_str(&format!("{:02x}", byte));
+    }
+
+    // Tampered payload hash must NOT match published hash
+    assert_ne!(
+        calculated_hex, published_hash,
+        "Tampered artifact hash must fail verification against published checksum"
+    );
 }

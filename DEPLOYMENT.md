@@ -140,15 +140,11 @@ Save these variables into your deployment configuration or secret management vau
 
 ---
 
----
-
 ## 6. Post-Deployment & Testnet Lifecycle Verification
 
 Verify contract state, event emissions, and complete settlement lifecycle transitions after deployment on Soroban Testnet:
 
 ### Automated Lifecycle Verification Scripts
-
-Execute the end-to-end automated verification against Soroban testnet:
 
 ```bash
 # Automated build, deploy, lifecycle transitions, and event checks

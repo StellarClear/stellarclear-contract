@@ -1,9 +1,12 @@
 [package]
 name = "settlement-registry"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 publish = false
-license = "Apache-2.0"
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Soroban smart contract for the StellarClear settlement evidence and reconciliation registry"
 
 [lib]
 crate-type = ["cdylib"]

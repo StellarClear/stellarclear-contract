@@ -89,26 +89,53 @@ rustup target add wasm32v1-none
 cargo install --locked stellar-cli --version 28.1.0
 ```
 
-### Running Tests
+### Standard Quality & Test Commands
+
+Run the full verification suite (formatting, clippy linter, and unit/invariant tests):
 
 ```bash
-cargo test --workspace
+./scripts/check.sh
 ```
 
-### Checking Formatting
+Or execute individual checks:
 
 ```bash
+# Run unit and invariant tests
+cargo test --workspace
+
+# Check formatting
 cargo fmt --all -- --check
+
+# Run linter
+cargo clippy --all-targets --all-features -- -D warnings
 ```
 
 ### Building the Contract Wasm
+
+Build the reproducible Wasm binary and compute its SHA-256 artifact checksum:
+
+```bash
+./scripts/build.sh
+```
+
+Or build manually via the Stellar CLI:
 
 ```bash
 stellar contract build
 ```
 
-The optimized contract artifact will be generated at:
-`target/wasm32v1-none/release/settlement_registry.wasm`
+The optimized contract artifact is output to:
+```text
+target/wasm32v1-none/release/settlement_registry.wasm
+```
+
+### Checksum Verification
+
+Verify the SHA-256 hash of the generated artifact:
+
+```bash
+sha256sum target/wasm32v1-none/release/settlement_registry.wasm
+```
 
 ---
 

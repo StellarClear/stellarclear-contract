@@ -11,7 +11,7 @@
 //!   - `Owner`: requires `owner.require_auth()`
 //!   - `Counterparty`: requires `counterparty.require_auth()`
 //!   - `Observer`: requires active registered `observer.require_auth()` matching case observer.
-//!   All attestations require non-zero 32-byte commitments.
+//!   - All attestations require non-zero 32-byte commitments.
 //! - **Dispute Initiation**: Only `owner` or `counterparty` on `Break` cases with non-zero `dispute_commitment`.
 //! - **Dispute Resolution**: `owner` and `counterparty` must independently submit identical non-zero resolution commitments to transition to `Resolved`.
 //! - **Finalization**: Only `owner` on `Matched` cases (Owner + Observer attestations) or `Resolved` cases (Owner + Counterparty + Observer attestations).

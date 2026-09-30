@@ -2,6 +2,14 @@
 resolver = "2"
 members = ["contracts/*"]
 
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["StellarClear Contributors"]
+license = "Apache-2.0"
+repository = "https://github.com/StellarClear/stellarclear-contract"
+rust-version = "1.84.0"
+
 [workspace.dependencies]
 soroban-sdk = "27.0.4"
 

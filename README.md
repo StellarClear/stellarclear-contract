@@ -139,6 +139,13 @@ sha256sum target/wasm32v1-none/release/settlement_registry.wasm
 
 ---
 
+## Deployment & Security Documentation
+
+- **Deployment & Verification Guide**: Detailed instructions on network setup, contract deployment, parameter initialization, and post-deployment verification are provided in [`DEPLOYMENT.md`](./DEPLOYMENT.md).
+- **Security Policy & Invariants**: Cryptographic assumptions, authorization invariants, and vulnerability reporting procedures are detailed in [`SECURITY.md`](./SECURITY.md).
+
+---
+
 ## Current Status & Disclaimer
 
 > [!WARNING]

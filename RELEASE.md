@@ -13,6 +13,43 @@ This document details the complete contract release, security review, reproducib
 
 ---
 
+## 📦 StellarClear Contract v0.1.0 Release Overview
+
+### Release Summary
+
+| Property | Value |
+| :--- | :--- |
+| **Contract Name** | `settlement_registry` |
+| **Release Version** | `0.1.0` |
+| **Release Tag** | `v0.1.0` |
+| **WASM Artifact** | [`artifacts/settlement_registry.wasm`](./artifacts/settlement_registry.wasm) |
+| **SHA-256 Checksum** | `1018a81b1ac95046cb00466ceda7ee347204c08b71b1c51b3c9611dd32215d66` |
+| **WASM Size** | `22,722 bytes` (optimized) |
+| **Compilation Target** | `wasm32v1-none` |
+| **Soroban SDK** | `27.0.4` |
+| **Stellar CLI** | `28.1.0` |
+| **License** | Apache-2.0 |
+
+### Exported Smart Contract Functions (15)
+
+1. `__constructor(admin: Address)`: Initializes contract admin during deployment.
+2. `add_observer(observer: Address)`: Admin registers authorized observer address.
+3. `remove_observer(observer: Address)`: Admin revokes observer authorization.
+4. `is_observer(observer: Address) -> bool`: Checks whether an address is an authorized observer.
+5. `create_case(case_id, owner, counterparty, terms_commitment, expires_at_ledger)`: Opens new settlement case.
+6. `record_observation(observer, case_id, tx_hash, observed_ledger, observation_commitment)`: Anchors Stellar transaction observation.
+7. `record_match(observer, case_id)`: Records positive reconciliation match.
+8. `record_break(observer, case_id, break_code)`: Records reconciliation break with standardized `BreakCode`.
+9. `open_dispute(disputant, case_id, dispute_commitment)`: Counterparty or owner opens formal dispute on broken case.
+10. `submit_resolution(party, case_id, resolution_commitment)`: Records agreed dispute resolution terms.
+11. `submit_attestation(case_id, role, attestation_commitment)`: Submits cryptographic attestation (Owner, Counterparty, Observer).
+12. `finalize_case(case_id)`: Irreversibly locks settlement outcome and finalizes case.
+13. `get_case(case_id) -> Case`: Retrieves complete on-chain case record.
+14. `get_attestation(case_id, party) -> Option<Attestation>`: Queries registered attestation for a specific party.
+15. `get_resolution(case_id, party) -> Option<BytesN<32>>`: Queries registered dispute resolution terms for a specific party.
+
+---
+
 ## 1. Security Review & Release-Candidate Checklist
 
 Before tagging or publishing any release, maintainers and deployers must complete and verify every step of this checklist:
@@ -100,9 +137,9 @@ The `release-manifest.json` provides comprehensive machine-readable provenance:
 {
   "contract_name": "settlement_registry",
   "version": "0.1.0",
-  "git_commit": "ac3d68390d302e498fea39fc8e93fcf680e7ad00",
-  "git_branch": "main",
-  "timestamp": "2026-09-30T05:49:19Z",
+  "git_commit": "81d7a0eac4a54fb0a13d4e2515f7a7a1217fe2f9",
+  "git_branch": "feat/settlement-registry-protocol",
+  "timestamp": "2026-09-30T07:48:30Z",
   "wasm_file": "settlement_registry.wasm",
   "wasm_sha256": "1018a81b1ac95046cb00466ceda7ee347204c08b71b1c51b3c9611dd32215d66",
   "wasm_size_bytes": 22722,

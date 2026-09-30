@@ -144,7 +144,14 @@ Save these variables into your deployment configuration or secret management vau
 
 Verify contract state and functionality after deployment:
 
-### 1. Register an Observer
+### 1. Verification Scripts
+
+```bash
+# Verify deployed contract on network against release artifact
+./scripts/verify-deployment.sh <SETTLEMENT_REGISTRY_CONTRACT_ID> testnet
+```
+
+### 2. Register an Observer
 
 ```bash
 stellar contract invoke \
@@ -156,7 +163,7 @@ stellar contract invoke \
   --observer <OBSERVER_ADDRESS>
 ```
 
-### 2. Verify Observer Registration
+### 3. Verify Observer Registration
 
 ```bash
 stellar contract invoke \
@@ -169,7 +176,7 @@ stellar contract invoke \
 ```
 *Expected Output: `true`*
 
-### 3. Smoke Test Case Creation
+### 4. Smoke Test Case Creation
 
 ```bash
 # Create a test settlement case
@@ -186,7 +193,7 @@ stellar contract invoke \
   --expires_at_ledger 99999999
 ```
 
-### 4. Query Case State
+### 5. Query Case State
 
 ```bash
 stellar contract invoke \
@@ -217,9 +224,11 @@ stellar contract invoke \
 
 ## 8. Summary Checklist
 
-- [ ] All unit, auth, adversarial, and boundary tests pass (`./scripts/check.sh`).
+- [ ] All unit, auth, adversarial, boundary, and fuzz tests pass (`./scripts/check.sh`).
 - [ ] Contract Wasm built cleanly and SHA-256 hash recorded (`./scripts/build.sh`).
+- [ ] Release artifact chain verified (`./scripts/verify-artifact.sh`).
 - [ ] Contract deployed with explicit `--admin` parameter.
 - [ ] Contract ID recorded in deployment environment (`SETTLEMENT_REGISTRY_CONTRACT_ID`).
 - [ ] Initial observer address(es) registered via `add_observer`.
-- [ ] Smoke test case created and queried on target network.
+- [ ] Deployed contract verified against release specification (`./scripts/verify-deployment.sh`).
+- [ ] Full release-candidate checklist verified in [`RELEASE.md`](./RELEASE.md).

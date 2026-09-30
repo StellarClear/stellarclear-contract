@@ -17,7 +17,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y dbus libdbus-1-dev pkg-config libssl-dev
+          sudo apt-get install -y dbus libdbus-1-dev pkg-config libssl-dev libudev-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -28,7 +28,8 @@ jobs:
 
       - name: Install Stellar CLI
         run: |
-          cargo install --locked stellar-cli --version 28.1.0
+          (curl -sLf "https://github.com/stellar/stellar-cli/releases/download/v28.1.0/stellar-cli-28.1.0-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/stellar.tar.gz && sudo tar -xzf /tmp/stellar.tar.gz -C /usr/local/bin/) || cargo install --locked stellar-cli --version 28.1.0
+          stellar version || true
 
       - name: Security and Invariant Tests
         run: |

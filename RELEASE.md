@@ -1,80 +1,134 @@
-# SettlementRegistry Release Process & Artifact Specification
+# SettlementRegistry Release Process & Verification Checklist
 
-This document details the repeatable release process, artifact packaging, verification, and distribution for the `SettlementRegistry` Soroban smart contract.
+This document specifies the complete, end-to-end production and testnet release procedure for the `SettlementRegistry` Soroban smart contract.
 
 ---
 
-## 1. Release Artifact Package
+## ⚠️ Security Status & Audit Disclaimer
+
+> [!CAUTION]
+> **UNAUDITED PROTOTYPE / DEVELOPMENT IMPLEMENTATION**:
+> The `SettlementRegistry` smart contract is under active development and has **not** undergone an independent third-party security audit or formal verification.
+> Do **NOT** deploy or use this contract in production environments handling real financial value without prior independent security auditing.
+
+---
+
+## 1. Production / Testnet Release Checklist
+
+Before tagging or publishing any release, maintainers and deployers must complete and verify every step of this checklist:
+
+### Pre-Release Quality & Environment Checks
+
+- [ ] **Clean Working Tree**: Ensure `git status` reports a clean working tree with no uncommitted or untracked changes.
+- [ ] **Tests Pass**: Full workspace unit, invariant, adversarial, boundary, and fuzz test suites pass (`cargo test --workspace`).
+- [ ] **Formatting Passes**: Source code conforms to Rust formatting standards (`cargo fmt --all -- --check`).
+- [ ] **Clippy Passes**: Linter passes cleanly with zero warnings (`cargo clippy --workspace --all-targets --all-features -- -D warnings`).
+- [ ] **WASM Builds**: Deterministic WebAssembly binary compiles successfully with `wasm32v1-none` target (`./scripts/build.sh`).
+- [ ] **Checksum Recorded**: SHA-256 hash generated and recorded in `artifacts/settlement_registry.wasm.sha256` and release manifest.
+- [ ] **Release Version Recorded**: Workspace version in `Cargo.toml` matches tag and release notes.
+
+### Deployment & Post-Deployment Verification
+
+- [ ] **Deployment Network Recorded**: Explicit target network parameters configured (Testnet / Mainnet RPC URL, network passphrase).
+- [ ] **Contract ID Recorded**: Deployed Soroban contract address (`CA...` or `CB...`) captured and exported in environment (`SETTLEMENT_REGISTRY_CONTRACT_ID`).
+- [ ] **Deployed Artifact Verified**: Deployed contract instance verified on target network using automated verification suite (`./scripts/testnet-verification.sh` & `./scripts/verify-deployment.sh`).
+- [ ] **Artifact Integrity Verified**: Published WASM artifact byte-for-byte matches tagged source build (`./scripts/verify-artifact.sh` & `cargo test --test release_artifact`).
+- [ ] **Security Assumptions Reviewed**: Review role separation, observer trust model, lack of backdoors, and state immutability in [`SECURITY.md`](./SECURITY.md).
+- [ ] **Upgrade Policy Reviewed**: Review contract instance versioning and historical state retention policies.
+- [ ] **Prototype / Audit Disclaimer Preserved**: Ensure security disclaimers are preserved in all distribution artifacts.
+
+---
+
+## 2. Release Artifact Package
 
 Every contract release produces a canonical set of verifiable artifacts:
 
 | Artifact | Location | Purpose |
 | :--- | :--- | :--- |
-| **WASM Binary** | `artifacts/settlement_registry.wasm` | Bytecode artifact deployed to Soroban networks |
-| **Checksum File** | `artifacts/settlement_registry.wasm.sha256` | SHA-256 hash for byte-for-byte integrity checks |
-| **Release Manifest** | `artifacts/release-manifest.json` | Comprehensive machine-readable build metadata |
-| **Versioned Archive** | `artifacts/v<VERSION>/` | Immutable per-version archive of binary, checksum, and manifest |
+| **WASM Binary** | `artifacts/settlement_registry.wasm` | Optimized byte-for-byte binary for deployment |
+| **Checksum File** | `artifacts/settlement_registry.wasm.sha256` | SHA-256 cryptographic verification checksum |
+| **Release Manifest** | `artifacts/release-manifest.json` | Machine-readable build, compiler, and network metadata |
+| **Versioned Archive** | `artifacts/v<VERSION>/` | Immutable per-version snapshot of binary, checksum, and manifest |
 
 ---
 
-## 2. Generating Release Artifacts
+## 3. Step-by-Step Release Procedure
 
-To create the release package from the repository source:
+### Step 1: Execute Complete Quality Verification
 
 ```bash
-# 1. Run all quality and test checks
+# Runs fmt check, clippy with -D warnings, unit/integration tests, and WASM build
 ./scripts/check.sh
+```
 
-# 2. Package release artifacts
+### Step 2: Package Release Artifacts
+
+```bash
+# Generates canonical WASM, SHA-256 checksum, manifest, and versioned archive
 ./scripts/release.sh
 ```
 
----
-
-## 3. Release Manifest Specification
-
-The release manifest records:
-- **Contract Name & Version**: Aligned with workspace `Cargo.toml`.
-- **Source Revision**: Exact Git commit SHA and branch name.
-- **WASM Metadata**: Canonical file name, SHA-256 checksum, and file size in bytes.
-- **Toolchain Environment**: `rustc` compiler version, `stellar-cli` version, and `soroban-sdk` version.
-- **Target Network Metadata**: Network passphrases, RPC endpoints, and deployed contract addresses (when deployed).
-
----
-
-## 4. Release Artifact Integrity Verification
-
-To ensure that the published WASM artifact is byte-for-byte identical to the artifact produced from the tagged source revision, execute the verification checks:
-
-### Automated Verification Script
+### Step 3: Verify Release Artifact Integrity
 
 ```bash
+# Rebuilds from source and verifies byte-for-byte reproducibility against manifest
 ./scripts/verify-artifact.sh
-```
-
-### Verification Pipeline
-
-```text
-source revision
-       ↓
-     build
-       ↓
-     WASM
-       ↓
-    SHA-256
-       ↓
-published checksum
-```
-
-Expected Verification Results:
-- **Checksum Matches**: SHA-256 computed on fresh build matches `artifacts/settlement_registry.wasm.sha256`.
-- **Reproducible Binary**: Byte-for-byte binary identity between newly built and published WASM.
-- **Manifest Consistency**: Version, Git commit, compiler version, and hash in `release-manifest.json` are consistent.
-
-### Programmatic Integration Test Matrix
-
-Execute the dedicated release artifact integration test suite:
-
-```bash
 cargo test --test release_artifact -- --nocapture
 ```
+
+### Step 4: Verify Deployment on Testnet
+
+```bash
+# Executes automated deployment and full lifecycle test suite on Soroban testnet
+./scripts/testnet-verification.sh
+cargo test --test deployed_testnet -- --nocapture
+```
+
+### Step 5: Verify Live Deployed Contract Instance
+
+```bash
+./scripts/verify-deployment.sh <DEPLOYED_CONTRACT_ID> testnet
+```
+
+---
+
+## 4. Release Manifest Specification
+
+The `release-manifest.json` provides comprehensive machine-readable provenance:
+
+```json
+{
+  "contract_name": "settlement_registry",
+  "version": "0.1.0",
+  "git_commit": "ac3d68390d302e498fea39fc8e93fcf680e7ad00",
+  "git_branch": "main",
+  "timestamp": "2026-09-30T05:49:19Z",
+  "wasm_file": "settlement_registry.wasm",
+  "wasm_sha256": "1018a81b1ac95046cb00466ceda7ee347204c08b71b1c51b3c9611dd32215d66",
+  "wasm_size_bytes": 22722,
+  "rustc_version": "rustc 1.84.0",
+  "stellar_cli_version": "stellar 28.1.0",
+  "soroban_sdk_version": "27.0.4",
+  "target": "wasm32v1-none",
+  "networks": {
+    "testnet": {
+      "rpc_url": "https://soroban-testnet.stellar.org",
+      "network_passphrase": "Test SDF Network ; September 2015",
+      "contract_id": ""
+    },
+    "mainnet": {
+      "rpc_url": "https://mainnet.sorobanrpc.com",
+      "network_passphrase": "Public Global Stellar Network ; July 2015",
+      "contract_id": ""
+    }
+  }
+}
+```
+
+---
+
+## 5. Security & Upgrade Policies
+
+1. **Protocol Immutability**: All finalized cases, commitments, and reconciliation decisions are permanently immutable on-chain.
+2. **Contract Instance Versioning**: Upgrades occur through deploying new versioned contract instances (`v0.1.0`, `v0.2.0`, etc.). Prior instances remain permanently queryable.
+3. **No Administrative Backdoors**: Admin privileges are strictly restricted to observer registration (`add_observer`, `remove_observer`). There are no emergency overrides or asset transfer capabilities.

@@ -198,13 +198,20 @@ The integration test matrix verifies:
 
 ---
 
-## 8. Summary Checklist
+## 8. Production / Testnet Release Checklist
 
-- [ ] All unit, auth, adversarial, and boundary tests pass (`./scripts/check.sh`).
-- [ ] Contract Wasm built cleanly and SHA-256 hash recorded (`./scripts/build.sh`).
-- [ ] Contract deployed with explicit `--admin` parameter.
-- [ ] Contract ID recorded in deployment environment (`SETTLEMENT_REGISTRY_CONTRACT_ID`).
-- [ ] Initial observer address(es) registered via `add_observer`.
-- [ ] Deployed testnet verification executed (`./scripts/testnet-verification.sh` & `cargo test --test deployed_testnet`).
-- [ ] Smoke test case created and queried on target network.
-- [ ] Final on-chain state readability verified (`./scripts/verify-deployment.sh`).
+Follow the complete verification checklist before publishing or promoting any release:
+
+- [ ] **Clean Working Tree**: Ensure `git status` reports a clean working tree.
+- [ ] **Quality Checks Pass**: Formatting (`cargo fmt --check`), linter (`cargo clippy --workspace --all-targets --all-features -- -D warnings`), and full test matrix (`cargo test --workspace`) pass cleanly (`./scripts/check.sh`).
+- [ ] **WASM Built Deterministically**: Bytecode generated cleanly and SHA-256 hash recorded (`./scripts/build.sh`).
+- [ ] **Release Artifacts Packaged**: Artifact package and manifest generated (`./scripts/release.sh`).
+- [ ] **Artifact Integrity Verified**: Published WASM artifact byte-for-byte matches fresh tagged build (`./scripts/verify-artifact.sh`).
+- [ ] **Contract Deployed with Constructor**: Contract deployed with explicit `--admin` parameter.
+- [ ] **Contract ID Recorded**: Contract address saved to environment (`SETTLEMENT_REGISTRY_CONTRACT_ID`).
+- [ ] **Initial Observers Registered**: Authorized observer address(es) registered via `add_observer`.
+- [ ] **Deployed Verification Executed**: Testnet lifecycle verified via automated script (`./scripts/testnet-verification.sh`) and integration tests (`cargo test --test deployed_testnet`).
+- [ ] **Live Instance Smoke-Tested**: Case creation, observation, matching, attestation, and final state querying verified on target network (`./scripts/verify-deployment.sh`).
+- [ ] **Security Assumptions Reviewed**: Review authorization invariants in [`SECURITY.md`](./SECURITY.md).
+- [ ] **Upgrade Policy Reviewed**: New contract instance versioning and historical state permanence confirmed.
+- [ ] **Prototype / Audit Disclaimer Preserved**: Prototype disclaimer intact across all documentation.

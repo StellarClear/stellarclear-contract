@@ -12,6 +12,10 @@ description = "Soroban smart contract for the StellarClear settlement evidence a
 crate-type = ["cdylib", "rlib"]
 
 [[test]]
+name = "deployed_testnet"
+path = "../../tests/deployed_testnet.rs"
+
+[[test]]
 name = "release_artifact"
 path = "../../tests/release_artifact.rs"
 

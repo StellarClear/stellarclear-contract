@@ -54,7 +54,7 @@ fn test_release_chain_source_revision_and_version() {
 }
 
 #[test]
-fn test_release_chain_wasm_binary_and_checksum_verification() {
+fn test_release_artifact_wasm_binary_integrity() {
     let env = Env::default();
     let wasm_path = find_file_path("artifacts/settlement_registry.wasm")
         .or_else(|| find_file_path("target/wasm32v1-none/release/settlement_registry.wasm"))
@@ -97,7 +97,7 @@ fn test_release_chain_wasm_binary_and_checksum_verification() {
 }
 
 #[test]
-fn test_release_chain_manifest_metadata_and_network_config() {
+fn test_release_manifest_metadata_consistency() {
     if let Some(manifest_path) = find_file_path("artifacts/release-manifest.json") {
         let manifest_content = std::fs::read_to_string(manifest_path).unwrap();
         assert!(manifest_content.contains("\"contract_name\": \"settlement_registry\""));
@@ -109,7 +109,22 @@ fn test_release_chain_manifest_metadata_and_network_config() {
 }
 
 #[test]
-fn test_release_chain_deployed_contract_behavior_match() {
+fn test_versioned_archive_consistency() {
+    if let (Some(versioned_path), Some(active_path)) = (
+        find_file_path("artifacts/v0.1.0/settlement_registry.wasm"),
+        find_file_path("artifacts/settlement_registry.wasm"),
+    ) {
+        let v_bytes = std::fs::read(versioned_path).unwrap();
+        let a_bytes = std::fs::read(active_path).unwrap();
+        assert_eq!(
+            v_bytes, a_bytes,
+            "Versioned v0.1.0 artifact must be identical to active artifact"
+        );
+    }
+}
+
+#[test]
+fn test_release_contract_execution_in_soroban_env() {
     let env = Env::default();
     env.mock_all_auths();
     env.ledger().set_sequence_number(1_000);

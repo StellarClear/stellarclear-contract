@@ -43,7 +43,7 @@ if [ "$CALCULATED_HASH" != "$RECORDED_HASH" ]; then
 fi
 echo "WASM Checksum verified: $CALCULATED_HASH"
 
-echo "6. Verifying release artifact chain..."
+echo "6. Verifying release artifact chain and metadata..."
 ./scripts/verify-artifact.sh
 
 echo ""

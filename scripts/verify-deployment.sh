@@ -2,7 +2,7 @@
 set -euo pipefail
 
 echo "======================================================"
-echo " StellarClear Deployed Contract Verification Utility"
+echo " StellarClear Contract Deployment Verification Utility"
 echo "======================================================"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -14,8 +14,8 @@ NETWORK="${2:-${STELLAR_NETWORK:-testnet}}"
 if [ -z "$CONTRACT_ID" ]; then
     echo "Usage: $0 <CONTRACT_ID> [NETWORK]"
     echo "  or export SETTLEMENT_REGISTRY_CONTRACT_ID=<CONTRACT_ID>"
-    echo "Running local release artifact verification as default..."
-    cargo test --test release_artifact
+    echo "Running local deployed test suite..."
+    cargo test --test deployed_testnet
     exit 0
 fi
 
@@ -28,6 +28,8 @@ WASM_FILE="target/wasm32v1-none/release/settlement_registry.wasm"
 if [ -f "$WASM_FILE" ]; then
     LOCAL_HASH="$(sha256sum "$WASM_FILE" | awk '{print $1}')"
     echo " - Local Release WASM SHA-256: $LOCAL_HASH"
+else
+    echo " - Local WASM artifact not yet built (run ./scripts/build.sh to verify bytecode)"
 fi
 
 if command -v stellar &>/dev/null; then
@@ -42,7 +44,8 @@ fi
 
 # Run test matrix
 echo ""
-echo "Running release artifact verification test suite..."
+echo "Running programmatic deployed contract verification suite..."
+cargo test --test deployed_testnet
 cargo test --test release_artifact
 
 echo ""

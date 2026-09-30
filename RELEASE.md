@@ -1,6 +1,6 @@
 # SettlementRegistry Release Process & Security Review Checklist
 
-This document details the complete contract release, security review, and deployment verification procedures for the `SettlementRegistry` Soroban smart contract.
+This document details the complete contract release, security review, reproducible artifact packaging, and deployment verification procedures for the `SettlementRegistry` Soroban smart contract.
 
 ---
 
@@ -15,83 +15,120 @@ This document details the complete contract release, security review, and deploy
 
 ## 1. Security Review & Release-Candidate Checklist
 
-Before tagging or publishing any release, maintainers and deployers must complete and verify every item of this checklist:
+Before tagging or publishing any release, maintainers and deployers must complete and verify every step of this checklist:
 
-### Section A: Pre-Release Quality & Environment Checks
+### Pre-Release Quality & Environment Checks
 
 - [ ] **Clean Working Tree**: Ensure `git status` reports a clean working tree with no uncommitted or untracked changes.
-- [ ] **Formatting Passes**: Source code conforms to Rust formatting standards:
-  ```bash
-  cargo fmt --all -- --check
-  ```
-- [ ] **Clippy Passes**: Linter passes cleanly with zero warnings:
-  ```bash
-  cargo clippy --workspace --all-targets --all-features -- -D warnings
-  ```
-- [ ] **Test Suite Passes**: Full workspace unit, invariant, boundary, fuzz, and integration tests pass cleanly:
-  ```bash
-  cargo test --workspace
-  ```
-- [ ] **Deterministic WASM Build**: WebAssembly binary compiles successfully with `wasm32v1-none` target:
-  ```bash
-  ./scripts/build.sh
-  ```
-- [ ] **Checksum Recorded**: SHA-256 hash generated and recorded in `target/wasm32v1-none/release/settlement_registry.wasm.sha256`.
+- [ ] **Tests Pass**: Full workspace unit, invariant, adversarial, boundary, and fuzz test suites pass (`cargo test --workspace`).
+- [ ] **Formatting Passes**: Source code conforms to Rust formatting standards (`cargo fmt --all -- --check`).
+- [ ] **Clippy Passes**: Linter passes cleanly with zero warnings (`cargo clippy --workspace --all-targets --all-features -- -D warnings`).
+- [ ] **WASM Builds**: Deterministic WebAssembly binary compiles successfully with `wasm32v1-none` target (`./scripts/build.sh`).
+- [ ] **Checksum Recorded**: SHA-256 hash generated and recorded in `artifacts/settlement_registry.wasm.sha256` and release manifest.
 - [ ] **Release Version Recorded**: Workspace version in `Cargo.toml` matches tag and release notes (`0.1.0`).
 
-### Section B: Release Artifact Integrity & Deployment Verification
+### Deployment & Post-Deployment Verification
 
-- [ ] **Artifact Chain Verified**: Rebuilds from tagged source revision and verifies byte-for-byte reproducibility:
-  ```bash
-  ./scripts/verify-artifact.sh
-  cargo test --test release_artifact -- --nocapture
-  ```
-- [ ] **Deployment Verification**: Verify deployed contract interface and bytecode on target network:
-  ```bash
-  ./scripts/verify-deployment.sh <CONTRACT_ID> [testnet|mainnet]
-  ```
-- [ ] **Deployment Parameters Recorded**: Target network passphrase, RPC URL, admin address, and contract ID recorded.
-
-### Section C: Security Review & Invariant Confirmation
-
-- [ ] **Authorization Invariants**: Review role permissions in [`SECURITY.md`](./SECURITY.md) (Owner, Counterparty, Admin, Observer).
-- [ ] **State Machine Invariants**: Verify terminal state immutability on finalized cases.
-- [ ] **Event Integrity**: Ensure 100% of state-mutating actions emit typed Soroban contract events.
-- [ ] **Known Limitations Reviewed**: Non-custodial scope, off-chain matching reliance, and observer authorization acknowledged.
-- [ ] **Upgrade Policy Reviewed**: New contract instance versioning and historical state retention policies confirmed.
-- [ ] **Prototype / Audit Disclaimer Preserved**: Security disclaimers preserved across all public documentation.
+- [ ] **Deployment Network Recorded**: Explicit target network parameters configured (Testnet / Mainnet RPC URL, network passphrase).
+- [ ] **Contract ID Recorded**: Deployed Soroban contract address (`CA...` or `CB...`) captured and exported in environment (`SETTLEMENT_REGISTRY_CONTRACT_ID`).
+- [ ] **Deployed Artifact Verified**: Deployed contract instance verified on target network using automated verification suite (`./scripts/testnet-verification.sh` & `./scripts/verify-deployment.sh`).
+- [ ] **Artifact Integrity Verified**: Published WASM artifact byte-for-byte matches tagged source build (`./scripts/verify-artifact.sh` & `cargo test --test release_artifact`).
+- [ ] **Security Assumptions Reviewed**: Review role separation, observer trust model, lack of backdoors, and state immutability in [`SECURITY.md`](./SECURITY.md).
+- [ ] **Upgrade Policy Reviewed**: Review contract instance versioning and historical state retention policies.
+- [ ] **Prototype / Audit Disclaimer Preserved**: Ensure security disclaimers are preserved in all distribution artifacts.
 
 ---
 
-## 2. Release Verification Chain
+## 2. Release Artifact Package
 
-Every contract release is verified through the canonical pipeline:
+Every contract release produces a canonical set of verifiable artifacts:
 
-```text
-Git Tag (e.g. v0.1.0)
-       ↓
-Source Revision (Git Commit SHA)
-       ↓
-Reproducible WASM Build (wasm32v1-none)
-       ↓
-SHA-256 Checksum (`settlement_registry.wasm.sha256`)
-       ↓
-Published Release Artifact
-       ↓
-Deployed Contract (`SETTLEMENT_REGISTRY_CONTRACT_ID`)
-```
+| Artifact | Location | Purpose |
+| :--- | :--- | :--- |
+| **WASM Binary** | `artifacts/settlement_registry.wasm` | Optimized byte-for-byte binary for deployment |
+| **Checksum File** | `artifacts/settlement_registry.wasm.sha256` | SHA-256 cryptographic verification checksum |
+| **Release Manifest** | `artifacts/release-manifest.json` | Machine-readable build, compiler, and network metadata |
+| **Versioned Archive** | `artifacts/v<VERSION>/` | Immutable per-version snapshot of binary, checksum, and manifest |
 
 ---
 
 ## 3. Step-by-Step Release Procedure
 
+### Step 1: Execute Complete Quality Verification
+
 ```bash
-# 1. Run all quality, security, and release-candidate checks
+# Runs fmt check, clippy with -D warnings, unit/integration tests, and WASM build
 ./scripts/check.sh
-
-# 2. Verify artifact integrity against source revision
-./scripts/verify-artifact.sh
-
-# 3. Verify deployed contract instance
-./scripts/verify-deployment.sh <CONTRACT_ID> testnet
 ```
+
+### Step 2: Package Release Artifacts
+
+```bash
+# Generates canonical WASM, SHA-256 checksum, manifest, and versioned archive
+./scripts/release.sh
+```
+
+### Step 3: Verify Release Artifact Integrity
+
+```bash
+# Rebuilds from source and verifies byte-for-byte reproducibility against manifest
+./scripts/verify-artifact.sh
+cargo test --test release_artifact -- --nocapture
+```
+
+### Step 4: Verify Deployment on Testnet
+
+```bash
+# Executes automated deployment and full lifecycle test suite on Soroban testnet
+./scripts/testnet-verification.sh
+cargo test --test deployed_testnet -- --nocapture
+```
+
+### Step 5: Verify Live Deployed Contract Instance
+
+```bash
+./scripts/verify-deployment.sh <DEPLOYED_CONTRACT_ID> testnet
+```
+
+---
+
+## 4. Release Manifest Specification
+
+The `release-manifest.json` provides comprehensive machine-readable provenance:
+
+```json
+{
+  "contract_name": "settlement_registry",
+  "version": "0.1.0",
+  "git_commit": "ac3d68390d302e498fea39fc8e93fcf680e7ad00",
+  "git_branch": "main",
+  "timestamp": "2026-09-30T05:49:19Z",
+  "wasm_file": "settlement_registry.wasm",
+  "wasm_sha256": "1018a81b1ac95046cb00466ceda7ee347204c08b71b1c51b3c9611dd32215d66",
+  "wasm_size_bytes": 22722,
+  "rustc_version": "rustc 1.84.0",
+  "stellar_cli_version": "stellar 28.1.0",
+  "soroban_sdk_version": "27.0.4",
+  "target": "wasm32v1-none",
+  "networks": {
+    "testnet": {
+      "rpc_url": "https://soroban-testnet.stellar.org",
+      "network_passphrase": "Test SDF Network ; September 2015",
+      "contract_id": ""
+    },
+    "mainnet": {
+      "rpc_url": "https://mainnet.sorobanrpc.com",
+      "network_passphrase": "Public Global Stellar Network ; July 2015",
+      "contract_id": ""
+    }
+  }
+}
+```
+
+---
+
+## 5. Security & Upgrade Policies
+
+1. **Protocol Immutability**: All finalized cases, commitments, and reconciliation decisions are permanently immutable on-chain.
+2. **Contract Instance Versioning**: Upgrades occur through deploying new versioned contract instances (`v0.1.0`, `v0.2.0`, etc.). Prior instances remain permanently queryable.
+3. **No Administrative Backdoors**: Admin privileges are strictly restricted to observer registration (`add_observer`, `remove_observer`). There are no emergency overrides or asset transfer capabilities.

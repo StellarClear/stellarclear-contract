@@ -40,5 +40,11 @@ jobs:
       - name: Run verification suite
         run: ./scripts/check.sh
 
+      - name: Build release WASM artifact
+        run: ./scripts/build.sh
+
       - name: Verify release artifact chain
         run: ./scripts/verify-artifact.sh
+
+      - name: Run deployed testnet test matrix
+        run: cargo test --test deployed_testnet -- --nocapture

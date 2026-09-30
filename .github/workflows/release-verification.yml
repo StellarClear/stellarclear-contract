@@ -1,0 +1,57 @@
+name: Release Verification
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - "v*"
+  pull_request:
+    paths:
+      - "contracts/**"
+      - "Cargo.*"
+      - "scripts/**"
+      - ".github/workflows/**"
+
+jobs:
+  verify-release:
+    name: Reproducible Release Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dbus libdbus-1-dev pkg-config libssl-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.84.0
+          targets: wasm32v1-none
+          components: rustfmt, clippy
+
+      - name: Install Stellar CLI
+        run: |
+          cargo install --locked stellar-cli --version 28.1.0
+
+      - name: Verify workspace quality & tests
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets --all-features -- -D warnings
+          cargo test --workspace
+
+      - name: Build release WASM artifact
+        run: ./scripts/build.sh
+
+      - name: Verify WASM artifact checksum & metadata
+        run: |
+          WASM_PATH="target/wasm32v1-none/release/settlement_registry.wasm"
+          SHA_PATH="${WASM_PATH}.sha256"
+          test -f "$WASM_PATH"
+          test -f "$SHA_PATH"
+          sha256sum -c "$SHA_PATH"
+
+      - name: Run deployed testnet test matrix
+        run: cargo test --test deployed_testnet -- --nocapture

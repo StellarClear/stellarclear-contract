@@ -140,64 +140,47 @@ Save these variables into your deployment configuration or secret management vau
 
 ---
 
-## 6. Post-Deployment Verification
+---
 
-Verify contract state and functionality after deployment:
+## 6. Post-Deployment & Testnet Lifecycle Verification
 
-### 1. Register an Observer
+Verify contract state, event emissions, and complete settlement lifecycle transitions after deployment on Soroban Testnet:
 
-```bash
-stellar contract invoke \
-  --id $SETTLEMENT_REGISTRY_CONTRACT_ID \
-  --source deployer \
-  --network testnet \
-  -- \
-  add_observer \
-  --observer <OBSERVER_ADDRESS>
-```
+### Automated Lifecycle Verification Scripts
 
-### 2. Verify Observer Registration
+Execute the end-to-end automated verification against Soroban testnet:
 
 ```bash
-stellar contract invoke \
-  --id $SETTLEMENT_REGISTRY_CONTRACT_ID \
-  --source deployer \
-  --network testnet \
-  -- \
-  is_observer \
-  --observer <OBSERVER_ADDRESS>
-```
-*Expected Output: `true`*
+# Automated build, deploy, lifecycle transitions, and event checks
+./scripts/testnet-verification.sh
 
-### 3. Smoke Test Case Creation
+# Verify an existing deployed contract ID
+./scripts/verify-deployment.sh <CONTRACT_ID> testnet
+```
+
+### Programmatic Integration Test Matrix
+
+Execute the dedicated Soroban integration test suite validating the full deployment lifecycle:
 
 ```bash
-# Create a test settlement case
-stellar contract invoke \
-  --id $SETTLEMENT_REGISTRY_CONTRACT_ID \
-  --source deployer \
-  --network testnet \
-  -- \
-  create_case \
-  --case_id "0101010101010101010101010101010101010101010101010101010101010101" \
-  --owner $(stellar keys address deployer) \
-  --counterparty "[]" \
-  --terms_commitment "0202020202020202020202020202020202020202020202020202020202020202" \
-  --expires_at_ledger 99999999
+cargo test --test deployed_testnet -- --nocapture
 ```
 
-### 4. Query Case State
-
-```bash
-stellar contract invoke \
-  --id $SETTLEMENT_REGISTRY_CONTRACT_ID \
-  --source deployer \
-  --network testnet \
-  -- \
-  get_case \
-  --case_id "0101010101010101010101010101010101010101010101010101010101010101"
-```
-*Expected Output: Case object with status `0` (`Open`).*
+The integration test matrix verifies:
+1. **Network & Contract Capture**: Explicit recording of network passphrase (`Test SDF Network ; September 2015`) and deployed contract address.
+2. **Observer Management**: Admin adds observer (`add_observer`), verifies registration (`is_observer`), and checks `ObserverAdded` event emission.
+3. **Case Lifecycle (Match Path)**:
+   - Case creation (`create_case`) emitting `CaseCreated`.
+   - Observation recording (`record_observation`) with transaction hash and ledger index emitting `ObservationRecorded`.
+   - Reconciliation match (`record_match`) transitioning state from `Observed` to `Matched` emitting `CaseMatched`.
+   - Three-party attestation submission (`submit_attestation`) by Owner, Counterparty, and Observer emitting `AttestationSubmitted`.
+   - Case finalization (`finalize_case`) transitioning state to `Finalized` emitting `CaseFinalized`.
+4. **Case Lifecycle (Break & Dispute Path)**:
+   - Observation recording followed by `record_break` with typed `BreakCode` (emitting `CaseBroken`).
+   - Dispute opening (`open_dispute`) by owner emitting `DisputeOpened`.
+   - Two-party resolution agreement (`submit_resolution`) transitioning state to `Resolved` emitting `DisputeResolved`.
+   - Attestation and finalization on resolved dispute cases.
+5. **Bytecode Execution Verification**: Loads compiled WASM artifact from `target/wasm32v1-none/release/settlement_registry.wasm`, validates SHA-256 checksum, and verifies bytecode execution fidelity in Soroban host environment.
 
 ---
 
@@ -215,11 +198,20 @@ stellar contract invoke \
 
 ---
 
-## 8. Summary Checklist
+## 8. Production / Testnet Release Checklist
 
-- [ ] All unit, auth, adversarial, and boundary tests pass (`./scripts/check.sh`).
-- [ ] Contract Wasm built cleanly and SHA-256 hash recorded (`./scripts/build.sh`).
-- [ ] Contract deployed with explicit `--admin` parameter.
-- [ ] Contract ID recorded in deployment environment (`SETTLEMENT_REGISTRY_CONTRACT_ID`).
-- [ ] Initial observer address(es) registered via `add_observer`.
-- [ ] Smoke test case created and queried on target network.
+Follow the complete verification checklist before publishing or promoting any release:
+
+- [ ] **Clean Working Tree**: Ensure `git status` reports a clean working tree.
+- [ ] **Quality Checks Pass**: Formatting (`cargo fmt --check`), linter (`cargo clippy --workspace --all-targets --all-features -- -D warnings`), and full test matrix (`cargo test --workspace`) pass cleanly (`./scripts/check.sh`).
+- [ ] **WASM Built Deterministically**: Bytecode generated cleanly and SHA-256 hash recorded (`./scripts/build.sh`).
+- [ ] **Release Artifacts Packaged**: Artifact package and manifest generated (`./scripts/release.sh`).
+- [ ] **Artifact Integrity Verified**: Published WASM artifact byte-for-byte matches fresh tagged build (`./scripts/verify-artifact.sh`).
+- [ ] **Contract Deployed with Constructor**: Contract deployed with explicit `--admin` parameter.
+- [ ] **Contract ID Recorded**: Contract address saved to environment (`SETTLEMENT_REGISTRY_CONTRACT_ID`).
+- [ ] **Initial Observers Registered**: Authorized observer address(es) registered via `add_observer`.
+- [ ] **Deployed Verification Executed**: Testnet lifecycle verified via automated script (`./scripts/testnet-verification.sh`) and integration tests (`cargo test --test deployed_testnet`).
+- [ ] **Live Instance Smoke-Tested**: Case creation, observation, matching, attestation, and final state querying verified on target network (`./scripts/verify-deployment.sh`).
+- [ ] **Security Assumptions Reviewed**: Review authorization invariants in [`SECURITY.md`](./SECURITY.md).
+- [ ] **Upgrade Policy Reviewed**: New contract instance versioning and historical state permanence confirmed.
+- [ ] **Prototype / Audit Disclaimer Preserved**: Prototype disclaimer intact across all documentation.

@@ -139,9 +139,11 @@ sha256sum target/wasm32v1-none/release/settlement_registry.wasm
 
 ---
 
-## Deployment & Security Documentation
+## Deployment, Release, and Security Documentation
 
-- **Deployment & Verification Guide**: Detailed instructions on network setup, contract deployment, parameter initialization, and post-deployment verification are provided in [`DEPLOYMENT.md`](./DEPLOYMENT.md).
+- **Release Process & Verification Checklist**: Canonical release procedures, reproducible build requirements, and pre-deployment checklists are documented in [`RELEASE.md`](./RELEASE.md).
+- **Deployment & Testnet Verification**: Detailed instructions on network configuration, contract deployment, parameter initialization, and testnet lifecycle verification are provided in [`DEPLOYMENT.md`](./DEPLOYMENT.md).
+- **Release Artifacts**: Versioned WebAssembly binaries, SHA-256 hashes, and metadata manifests are located in [`artifacts/`](./artifacts/README.md).
 - **Security Policy & Invariants**: Cryptographic assumptions, authorization invariants, and vulnerability reporting procedures are detailed in [`SECURITY.md`](./SECURITY.md).
 
 ---

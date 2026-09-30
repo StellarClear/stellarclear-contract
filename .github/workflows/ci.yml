@@ -8,11 +8,16 @@ on:
 
 jobs:
   check-and-test:
-    name: Lint, Test, and Build Contract
+    name: Lint, Test, and Reproducible Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dbus libdbus-1-dev pkg-config libssl-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -25,14 +30,8 @@ jobs:
         run: |
           cargo install --locked stellar-cli --version 28.1.0
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
+      - name: Run verification checks (fmt, clippy, tests, build, metadata)
+        run: ./scripts/check.sh
 
-      - name: Run clippy
-        run: cargo clippy --all-targets -- -D warnings
-
-      - name: Run test suite
-        run: cargo test --workspace
-
-      - name: Build contract Wasm
-        run: stellar contract build
+      - name: Run deployed testnet integration test matrix
+        run: cargo test --test deployed_testnet -- --nocapture

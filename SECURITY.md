@@ -59,6 +59,7 @@ The `SettlementRegistry` contract enforces strict role-based access control, cry
 1. **Protocol Immutability**: All finalized settlement cases, terms commitments, and break records are permanently immutable on-chain.
 2. **Contract Instance Versioning**: To upgrade protocol logic, new contract instances with updated Wasm code are deployed. Historical settlement evidence remains anchored and queryable on prior contract instances.
 3. **Admin Scope**: Admin keys are strictly restricted to observer registry management (`add_observer`, `remove_observer`) and have no ability to alter case states, dispute records, or attestations.
+4. **Release Checklist Compliance**: All releases must satisfy the mandatory pre-release and deployment verification checklist in [`RELEASE.md`](./RELEASE.md).
 
 ---
 

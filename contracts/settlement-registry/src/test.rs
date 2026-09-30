@@ -3066,3 +3066,164 @@ fn test_rc_security_dispute_and_resolution_rules() {
     client.submit_resolution(&counterparty, &case_id, &res_cp);
     assert_eq!(client.get_case(&case_id).status, CaseStatus::Disputed);
 }
+
+// ---------------------------------------------------------------------------
+// MALFORMED-INPUT AND RESOURCE-BOUND TEST SUITE
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_malformed_input_all_zero_and_all_ones_commitments() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let zero = zero_bytes(&env);
+    let all_ones = sample_bytes(&env, 0xff);
+
+    // All zero terms commitment rejected
+    assert_eq!(
+        client.try_create_case(&sample_bytes(&env, 1), &owner, &None, &zero, &500),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    // All ones terms commitment accepted
+    let case_id = sample_bytes(&env, 2);
+    assert_eq!(
+        client.create_case(&case_id, &owner, &None, &all_ones, &500),
+        ()
+    );
+
+    // All zero observation commitment rejected
+    assert_eq!(
+        client.try_record_observation(&observer, &case_id, &sample_bytes(&env, 3), &100, &zero),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    // All ones observation commitment accepted
+    assert_eq!(
+        client.record_observation(&observer, &case_id, &all_ones, &100, &all_ones),
+        ()
+    );
+}
+
+#[test]
+fn test_malformed_input_extreme_ledger_boundaries() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    env.ledger().set_sequence_number(1_000);
+
+    let case_id = sample_bytes(&env, 10);
+    let terms = sample_bytes(&env, 20);
+
+    // Expiration at or before current ledger rejected
+    assert_eq!(
+        client.try_create_case(&case_id, &owner, &None, &terms, &1_000),
+        Err(Ok(Error::InvalidExpiration))
+    );
+    assert_eq!(
+        client.try_create_case(&case_id, &owner, &None, &terms, &999),
+        Err(Ok(Error::InvalidExpiration))
+    );
+
+    // Maximum ledger sequence u32::MAX accepted
+    client.create_case(&case_id, &owner, &None, &terms, &u32::MAX);
+
+    // Observation at ledger 0 rejected
+    assert_eq!(
+        client.try_record_observation(
+            &observer,
+            &case_id,
+            &sample_bytes(&env, 1),
+            &0,
+            &sample_bytes(&env, 2)
+        ),
+        Err(Ok(Error::InvalidLedger))
+    );
+
+    // Observation in the future (> current ledger) rejected
+    assert_eq!(
+        client.try_record_observation(
+            &observer,
+            &case_id,
+            &sample_bytes(&env, 1),
+            &1_001,
+            &sample_bytes(&env, 2)
+        ),
+        Err(Ok(Error::InvalidLedger))
+    );
+
+    // Observation at exact current ledger accepted
+    assert_eq!(
+        client.record_observation(
+            &observer,
+            &case_id,
+            &sample_bytes(&env, 1),
+            &1_000,
+            &sample_bytes(&env, 2)
+        ),
+        ()
+    );
+}
+
+#[test]
+fn test_malformed_input_invalid_state_transition_combinations() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 50);
+    client.create_case(&case_id, &owner, &None, &sample_bytes(&env, 51), &500);
+
+    // From Open: cannot record match, break, dispute, resolution, finalize directly
+    assert_eq!(
+        client.try_record_match(&observer, &case_id),
+        Err(Ok(Error::InvalidState))
+    );
+    assert_eq!(
+        client.try_record_break(&observer, &case_id, &BreakCode::AmountMismatch),
+        Err(Ok(Error::InvalidState))
+    );
+    assert_eq!(
+        client.try_open_dispute(&owner, &case_id, &sample_bytes(&env, 52)),
+        Err(Ok(Error::InvalidState))
+    );
+    assert_eq!(
+        client.try_submit_resolution(&owner, &case_id, &sample_bytes(&env, 53)),
+        Err(Ok(Error::InvalidState))
+    );
+    assert_eq!(
+        client.try_finalize_case(&case_id),
+        Err(Ok(Error::InvalidState))
+    );
+}
+
+#[test]
+fn test_resource_bound_multiple_case_lifecycle_and_reads() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    // Create 10 distinct settlement cases
+    for i in 1..=10 {
+        let case_id = sample_bytes(&env, i);
+        let terms = sample_bytes(&env, i + 100);
+        client.create_case(&case_id, &owner, &None, &terms, &5_000);
+
+        let tx_hash = sample_bytes(&env, i + 10);
+        let obs_comm = sample_bytes(&env, i + 20);
+        client.record_observation(&observer, &case_id, &tx_hash, &100, &obs_comm);
+        client.record_match(&observer, &case_id);
+        client.submit_attestation(&case_id, &AttestationRole::Owner, &sample_bytes(&env, i + 30));
+        client.submit_attestation(&case_id, &AttestationRole::Observer, &sample_bytes(&env, i + 40));
+        client.finalize_case(&case_id);
+
+        let final_case = client.get_case(&case_id);
+        assert_eq!(final_case.status, CaseStatus::Finalized);
+    }
+}

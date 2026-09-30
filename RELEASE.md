@@ -42,10 +42,39 @@ The release manifest records:
 
 ---
 
-## 4. Verification
+## 4. Release Artifact Integrity Verification
 
-Re-verify the built artifact against the published checksum:
+To ensure that the published WASM artifact is byte-for-byte identical to the artifact produced from the tagged source revision, execute the verification checks:
+
+### Automated Verification Script
 
 ```bash
-sha256sum -c artifacts/settlement_registry.wasm.sha256
+./scripts/verify-artifact.sh
+```
+
+### Verification Pipeline
+
+```text
+source revision
+       ↓
+     build
+       ↓
+     WASM
+       ↓
+    SHA-256
+       ↓
+published checksum
+```
+
+Expected Verification Results:
+- **Checksum Matches**: SHA-256 computed on fresh build matches `artifacts/settlement_registry.wasm.sha256`.
+- **Reproducible Binary**: Byte-for-byte binary identity between newly built and published WASM.
+- **Manifest Consistency**: Version, Git commit, compiler version, and hash in `release-manifest.json` are consistent.
+
+### Programmatic Integration Test Matrix
+
+Execute the dedicated release artifact integration test suite:
+
+```bash
+cargo test --test release_artifact -- --nocapture
 ```

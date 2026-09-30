@@ -5,6 +5,9 @@ use settlement_registry::{SettlementRegistry, SettlementRegistryClient};
 use soroban_sdk::testutils::{Address as _, Ledger};
 use soroban_sdk::{Address, BytesN, Env};
 
+const EXPECTED_RELEASE_CHECKSUM: &str =
+    "1018a81b1ac95046cb00466ceda7ee347204c08b71b1c51b3c9611dd32215d66";
+
 fn sample_bytes(env: &Env, val: u8) -> BytesN<32> {
     let raw = [val; 32];
     BytesN::from_array(env, &raw)
@@ -77,6 +80,15 @@ fn test_release_artifact_wasm_binary_integrity() {
     let calculated_hash = env.crypto().sha256(&wasm_sdk_bytes);
     assert_eq!(calculated_hash.to_array().len(), 32);
 
+    let mut calculated_hex = String::new();
+    for byte in calculated_hash.to_array() {
+        calculated_hex.push_str(&format!("{:02x}", byte));
+    }
+    assert_eq!(
+        calculated_hex, EXPECTED_RELEASE_CHECKSUM,
+        "Compiled WASM hash must match canonical v0.1.0 release checksum"
+    );
+
     // 3. Verify match with checksum file if present
     if let Some(sha_path) = find_file_path("artifacts/settlement_registry.wasm.sha256") {
         if let Ok(sha_content) = std::fs::read_to_string(sha_path) {
@@ -84,10 +96,6 @@ fn test_release_artifact_wasm_binary_integrity() {
                 .split_whitespace()
                 .next()
                 .expect("SHA256 checksum file must contain hash string");
-            let mut calculated_hex = String::new();
-            for byte in calculated_hash.to_array() {
-                calculated_hex.push_str(&format!("{:02x}", byte));
-            }
             assert_eq!(
                 calculated_hex, published_hash_hex,
                 "Calculated artifact hash must match published checksum file"
@@ -103,8 +111,14 @@ fn test_release_manifest_metadata_consistency() {
         assert!(manifest_content.contains("\"contract_name\": \"settlement_registry\""));
         assert!(manifest_content.contains("\"version\": \"0.1.0\""));
         assert!(manifest_content.contains("\"wasm_file\": \"settlement_registry.wasm\""));
+        assert!(manifest_content.contains(EXPECTED_RELEASE_CHECKSUM));
         assert!(manifest_content.contains("\"target\": \"wasm32v1-none\""));
         assert!(manifest_content.contains("\"networks\""));
+        assert!(manifest_content.contains("\"testnet\""));
+        assert!(manifest_content.contains("\"mainnet\""));
+        assert!(manifest_content.contains("https://soroban-testnet.stellar.org"));
+        assert!(manifest_content.contains("Test SDF Network ; September 2015"));
+        assert!(manifest_content.contains("Public Global Stellar Network ; July 2015"));
     }
 }
 
@@ -119,6 +133,18 @@ fn test_versioned_archive_consistency() {
         assert_eq!(
             v_bytes, a_bytes,
             "Versioned v0.1.0 artifact must be identical to active artifact"
+        );
+    }
+    if let (Some(versioned_sha), Some(active_sha)) = (
+        find_file_path("artifacts/v0.1.0/settlement_registry.wasm.sha256"),
+        find_file_path("artifacts/settlement_registry.wasm.sha256"),
+    ) {
+        let v_sha = std::fs::read_to_string(versioned_sha).unwrap();
+        let a_sha = std::fs::read_to_string(active_sha).unwrap();
+        assert_eq!(
+            v_sha.trim(),
+            a_sha.trim(),
+            "Versioned v0.1.0 SHA-256 must match active checksum file"
         );
     }
 }
@@ -148,21 +174,43 @@ fn test_release_contract_execution_in_soroban_env() {
 }
 
 #[test]
+fn test_released_deployment_identity_and_constructor_boundary() {
+    let env = Env::default();
+    env.mock_all_auths();
+    env.ledger().set_sequence_number(1_000);
+
+    let admin = Address::generate(&env);
+    let contract_id = env.register(SettlementRegistry, (&admin,));
+    let client = SettlementRegistryClient::new(&env, &contract_id);
+
+    // Initial state check: no observer registered yet
+    let random_observer = Address::generate(&env);
+    assert!(!client.is_observer(&random_observer));
+
+    // Admin can register observer
+    client.add_observer(&random_observer);
+    assert!(client.is_observer(&random_observer));
+
+    // Revocation check
+    client.remove_observer(&random_observer);
+    assert!(!client.is_observer(&random_observer));
+}
+
+#[test]
 fn test_release_chain_mismatch_failure_conditions() {
     let env = Env::default();
     let sample_data = b"tampered_wasm_payload";
     let sdk_bytes = soroban_sdk::Bytes::from_slice(&env, sample_data);
     let hash = env.crypto().sha256(&sdk_bytes);
 
-    let published_hash = "1018a81b1ac95046cb00466ceda7ee347204c08b71b1c51b3c9611dd32215d66";
     let mut calculated_hex = String::new();
     for byte in hash.to_array() {
         calculated_hex.push_str(&format!("{:02x}", byte));
     }
 
-    // Tampered payload hash must NOT match published hash
+    // Tampered payload hash must NOT match expected release checksum
     assert_ne!(
-        calculated_hex, published_hash,
+        calculated_hex, EXPECTED_RELEASE_CHECKSUM,
         "Tampered artifact hash must fail verification against published checksum"
     );
 }

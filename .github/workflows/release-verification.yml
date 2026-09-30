@@ -1,14 +1,20 @@
-name: CI
+name: Release Verification
 
 on:
   push:
     branches: [main]
+    tags:
+      - "v*"
   pull_request:
-    branches: [main]
+    paths:
+      - "contracts/**"
+      - "Cargo.*"
+      - "scripts/**"
+      - ".github/workflows/**"
 
 jobs:
-  check-and-test:
-    name: Lint, Test, and Reproducible Build
+  verify-release:
+    name: Reproducible Release Verification
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -30,5 +36,8 @@ jobs:
         run: |
           cargo install --locked stellar-cli --version 28.1.0
 
-      - name: Run verification checks (fmt, clippy, tests, build, metadata)
+      - name: Run verification suite
         run: ./scripts/check.sh
+
+      - name: Verify release artifact chain
+        run: ./scripts/verify-artifact.sh

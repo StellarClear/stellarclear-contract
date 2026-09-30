@@ -1,4 +1,4 @@
-name: CI
+name: Security Verification
 
 on:
   push:
@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  check-and-test:
-    name: Lint, Test, and Reproducible Build
+  security-checks:
+    name: Security Invariants & Release Candidate Verification
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -30,5 +30,11 @@ jobs:
         run: |
           cargo install --locked stellar-cli --version 28.1.0
 
-      - name: Run verification checks (fmt, clippy, tests, build, metadata)
-        run: ./scripts/check.sh
+      - name: Security and Invariant Tests
+        run: |
+          cargo test --workspace -- --nocapture
+
+      - name: Release Artifact Integrity Verification
+        run: |
+          ./scripts/build.sh
+          ./scripts/verify-artifact.sh

@@ -3219,8 +3219,16 @@ fn test_resource_bound_multiple_case_lifecycle_and_reads() {
         let obs_comm = sample_bytes(&env, i + 20);
         client.record_observation(&observer, &case_id, &tx_hash, &100, &obs_comm);
         client.record_match(&observer, &case_id);
-        client.submit_attestation(&case_id, &AttestationRole::Owner, &sample_bytes(&env, i + 30));
-        client.submit_attestation(&case_id, &AttestationRole::Observer, &sample_bytes(&env, i + 40));
+        client.submit_attestation(
+            &case_id,
+            &AttestationRole::Owner,
+            &sample_bytes(&env, i + 30),
+        );
+        client.submit_attestation(
+            &case_id,
+            &AttestationRole::Observer,
+            &sample_bytes(&env, i + 40),
+        );
         client.finalize_case(&case_id);
 
         let final_case = client.get_case(&case_id);

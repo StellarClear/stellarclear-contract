@@ -9,7 +9,11 @@ rust-version.workspace = true
 description = "Soroban smart contract for the StellarClear settlement evidence and reconciliation registry"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
+
+[[test]]
+name = "release_artifact"
+path = "../../tests/release_artifact.rs"
 
 [dependencies]
 soroban-sdk = { workspace = true }

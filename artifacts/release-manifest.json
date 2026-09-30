@@ -1,9 +1,9 @@
 {
   "contract_name": "settlement_registry",
   "version": "0.1.0",
-  "git_commit": "ac3d68390d302e498fea39fc8e93fcf680e7ad00",
-  "git_branch": "main",
-  "timestamp": "2026-09-30T05:49:19Z",
+  "git_commit": "81d7a0eac4a54fb0a13d4e2515f7a7a1217fe2f9",
+  "git_branch": "feat/settlement-registry-protocol",
+  "timestamp": "2026-09-30T07:48:30Z",
   "wasm_file": "settlement_registry.wasm",
   "wasm_sha256": "1018a81b1ac95046cb00466ceda7ee347204c08b71b1c51b3c9611dd32215d66",
   "wasm_size_bytes": 22722,

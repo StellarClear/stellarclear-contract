@@ -2742,3 +2742,327 @@ fn test_boundary_already_resolved_dispute_rejects_further_resolution() {
         Err(Ok(Error::InvalidState))
     );
 }
+
+// ---------------------------------------------------------------------------
+// RELEASE-CANDIDATE SECURITY REGRESSION SUITE
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_rc_security_authorization_boundaries() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    let malicious = Address::generate(&env);
+
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    let terms = sample_bytes(&env, 2);
+    client.create_case(&case_id, &owner, &Some(counterparty.clone()), &terms, &500);
+
+    // Malicious caller cannot record observation
+    assert_eq!(
+        client.try_record_observation(
+            &malicious,
+            &case_id,
+            &sample_bytes(&env, 3),
+            &100,
+            &sample_bytes(&env, 4),
+        ),
+        Err(Ok(Error::ObserverNotRegistered))
+    );
+
+    // Record legitimate observation
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+
+    // Malicious caller cannot record match or break
+    assert_eq!(
+        client.try_record_match(&malicious, &case_id),
+        Err(Ok(Error::ObserverNotRegistered))
+    );
+    assert_eq!(
+        client.try_record_break(&malicious, &case_id, &BreakCode::AmountMismatch),
+        Err(Ok(Error::ObserverNotRegistered))
+    );
+
+    // Malicious caller cannot open dispute on Observed case
+    assert_eq!(
+        client.try_open_dispute(&malicious, &case_id, &sample_bytes(&env, 10)),
+        Err(Ok(Error::Unauthorized))
+    );
+}
+
+#[test]
+fn test_rc_security_terminal_state_immutability() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 2),
+        &500,
+    );
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_match(&observer, &case_id);
+    client.submit_attestation(&case_id, &AttestationRole::Owner, &sample_bytes(&env, 10));
+    client.submit_attestation(
+        &case_id,
+        &AttestationRole::Counterparty,
+        &sample_bytes(&env, 11),
+    );
+    client.submit_attestation(
+        &case_id,
+        &AttestationRole::Observer,
+        &sample_bytes(&env, 12),
+    );
+
+    // Finalize case into terminal state
+    client.finalize_case(&case_id);
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Finalized);
+
+    // Verify all mutating endpoints are strictly rejected
+    assert_eq!(
+        client.try_record_observation(
+            &observer,
+            &case_id,
+            &sample_bytes(&env, 5),
+            &100,
+            &sample_bytes(&env, 6),
+        ),
+        Err(Ok(Error::InvalidState))
+    );
+    assert_eq!(
+        client.try_record_match(&observer, &case_id),
+        Err(Ok(Error::InvalidState))
+    );
+    assert_eq!(
+        client.try_record_break(&observer, &case_id, &BreakCode::AmountMismatch),
+        Err(Ok(Error::InvalidState))
+    );
+    assert_eq!(
+        client.try_open_dispute(&owner, &case_id, &sample_bytes(&env, 30)),
+        Err(Ok(Error::InvalidState))
+    );
+    assert_eq!(
+        client.try_submit_resolution(&owner, &case_id, &sample_bytes(&env, 40)),
+        Err(Ok(Error::InvalidState))
+    );
+    assert_eq!(
+        client.try_finalize_case(&case_id),
+        Err(Ok(Error::InvalidState))
+    );
+
+    // Stored case record remains completely intact
+    let final_case = client.get_case(&case_id);
+    assert_eq!(final_case.status, CaseStatus::Finalized);
+    assert_eq!(final_case.decision, Decision::Matched);
+    assert_eq!(final_case.finalized_at_ledger, Some(100));
+}
+
+#[test]
+fn test_rc_security_duplicate_calls() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+
+    // Duplicate observer registration
+    client.add_observer(&observer);
+    assert_eq!(
+        client.try_add_observer(&observer),
+        Err(Ok(Error::ObserverAlreadyRegistered))
+    );
+
+    let case_id = sample_bytes(&env, 1);
+    let terms = sample_bytes(&env, 2);
+    client.create_case(&case_id, &owner, &None, &terms, &500);
+
+    // Duplicate case creation
+    assert_eq!(
+        client.try_create_case(&case_id, &owner, &None, &terms, &500),
+        Err(Ok(Error::CaseAlreadyExists))
+    );
+
+    // Duplicate observation recording
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    assert_eq!(
+        client.try_record_observation(
+            &observer,
+            &case_id,
+            &sample_bytes(&env, 5),
+            &100,
+            &sample_bytes(&env, 6),
+        ),
+        Err(Ok(Error::InvalidState))
+    );
+
+    // Duplicate match recording
+    client.record_match(&observer, &case_id);
+    assert_eq!(
+        client.try_record_match(&observer, &case_id),
+        Err(Ok(Error::InvalidState))
+    );
+
+    // Duplicate attestation
+    client.submit_attestation(&case_id, &AttestationRole::Owner, &sample_bytes(&env, 10));
+    assert_eq!(
+        client.try_submit_attestation(&case_id, &AttestationRole::Owner, &sample_bytes(&env, 11)),
+        Err(Ok(Error::AttestationAlreadyExists))
+    );
+}
+
+#[test]
+fn test_rc_security_commitment_integrity() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let zero = zero_bytes(&env);
+    let valid = sample_bytes(&env, 1);
+
+    // Zero terms commitment rejected
+    assert_eq!(
+        client.try_create_case(&sample_bytes(&env, 2), &owner, &None, &zero, &500),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    let case_id = sample_bytes(&env, 3);
+    client.create_case(&case_id, &owner, &None, &valid, &500);
+
+    // Zero observation commitment rejected
+    assert_eq!(
+        client.try_record_observation(&observer, &case_id, &sample_bytes(&env, 4), &100, &zero),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    // Zero attestation commitment rejected
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 4),
+        &100,
+        &sample_bytes(&env, 5),
+    );
+    client.record_match(&observer, &case_id);
+    assert_eq!(
+        client.try_submit_attestation(&case_id, &AttestationRole::Owner, &zero),
+        Err(Ok(Error::InvalidCommitment))
+    );
+}
+
+#[test]
+fn test_rc_security_attestation_and_finalization_rules() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 2),
+        &500,
+    );
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_match(&observer, &case_id);
+
+    // Premature finalization without attestations fails
+    assert_eq!(
+        client.try_finalize_case(&case_id),
+        Err(Ok(Error::MissingRequiredAttestation))
+    );
+
+    // Finalization with only owner attestation fails
+    client.submit_attestation(&case_id, &AttestationRole::Owner, &sample_bytes(&env, 10));
+    assert_eq!(
+        client.try_finalize_case(&case_id),
+        Err(Ok(Error::MissingRequiredAttestation))
+    );
+
+    // Finalization succeeds once observer attests
+    client.submit_attestation(
+        &case_id,
+        &AttestationRole::Observer,
+        &sample_bytes(&env, 11),
+    );
+    assert_eq!(client.finalize_case(&case_id), ());
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Finalized);
+}
+
+#[test]
+fn test_rc_security_dispute_and_resolution_rules() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 1);
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 2),
+        &500,
+    );
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 3),
+        &100,
+        &sample_bytes(&env, 4),
+    );
+    client.record_break(&observer, &case_id, &BreakCode::AmountMismatch);
+
+    // Non-party cannot open dispute
+    let bystander = Address::generate(&env);
+    assert_eq!(
+        client.try_open_dispute(&bystander, &case_id, &sample_bytes(&env, 20)),
+        Err(Ok(Error::Unauthorized))
+    );
+
+    // Legitimate dispute opening
+    client.open_dispute(&owner, &case_id, &sample_bytes(&env, 20));
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Disputed);
+
+    // Mismatched resolution commitments keep status in Disputed
+    let res_owner = sample_bytes(&env, 30);
+    let res_cp = sample_bytes(&env, 31);
+    client.submit_resolution(&owner, &case_id, &res_owner);
+    client.submit_resolution(&counterparty, &case_id, &res_cp);
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Disputed);
+}

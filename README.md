@@ -15,7 +15,7 @@
 
 StellarClear is an open-source, Stellar-native settlement evidence and reconciliation protocol. It deterministically compares expected settlement instructions with observed Stellar payments, records machine-readable reconciliation outcomes, and anchors verifiable cryptographic proof and attestations on Soroban smart contracts.
 
-This repository contains the authoritative smart contract layer (`SettlementRegistry`). The companion off-chain SDK, REST API, ingestion indexer, and reconciliation engine live in [`StellarClear/stellarclear`](https://github.com/StellarClear/stellarclear).
+This repository contains the authoritative smart contract layer (`SettlementRegistry`). The companion off-chain SDK, REST API, ingestion indexer, and reconciliation engine live in [`StellarClear/stellarclear-app`](https://github.com/StellarClear/stellarclear-app).
 
 ---
 
@@ -141,7 +141,7 @@ sha256sum target/wasm32v1-none/release/settlement_registry.wasm
 
 - **GitHub Discussions**: [Ask questions and share ideas](https://github.com/StellarClear/stellarclear-contract/discussions)
 - **GitHub Issues**: [Report bugs or suggest features](https://github.com/StellarClear/stellarclear-contract/issues)
-- **Protocol Monorepo**: [StellarClear SDK, API & Indexer](https://github.com/StellarClear/stellarclear)
+- **Protocol Monorepo**: [StellarClear SDK, API & Indexer](https://github.com/StellarClear/stellarclear-app)
 
 ---
 

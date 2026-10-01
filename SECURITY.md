@@ -99,7 +99,7 @@ Every state-mutating transition emits a typed Soroban contract event:
 - Stellar Core consensus protocol & Soroban host environment internals
 - Upstream Rust compiler and third-party dependencies (`soroban-sdk`)
 - Off-chain mock test harness and fixture generators
-- Client-side application integrations (see [`StellarClear/stellarclear`](https://github.com/StellarClear/stellarclear) for service-level security)
+- Client-side application integrations (see [`StellarClear/stellarclear-app`](https://github.com/StellarClear/stellarclear-app) for service-level security)
 
 ---
 

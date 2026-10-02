@@ -9,7 +9,6 @@
   <a href="https://github.com/StellarClear/stellarclear-contract/actions/workflows/ci.yml"><img src="https://github.com/StellarClear/stellarclear-contract/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/StellarClear/stellarclear-contract/actions/workflows/security-verification.yml"><img src="https://github.com/StellarClear/stellarclear-contract/actions/workflows/security-verification.yml/badge.svg" alt="Security Verification"></a>
   <a href="https://github.com/StellarClear/stellarclear-contract/actions/workflows/release-verification.yml"><img src="https://github.com/StellarClear/stellarclear-contract/actions/workflows/release-verification.yml/badge.svg" alt="Release Verification"></a>
-  <a href="./SECURITY.md"><img src="https://img.shields.io/badge/Audit-Unaudited-orange.svg" alt="Audit Status"></a>
   <a href="https://stellar.org/soroban"><img src="https://img.shields.io/badge/Soroban-v27.0-7023e0.svg" alt="Soroban"></a>
 </p>
 

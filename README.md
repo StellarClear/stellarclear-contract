@@ -13,11 +13,6 @@
   <a href="https://stellar.org/soroban"><img src="https://img.shields.io/badge/Soroban-v27.0-7023e0.svg" alt="Soroban"></a>
 </p>
 
-> [!CAUTION]
-> **UNAUDITED SOFTWARE / TESTNET ONLY**:
-> The `SettlementRegistry` smart contract is under active development and has **not** undergone an independent third-party security audit or formal verification.
-> This codebase is strictly intended for testing, evaluation, and testnet prototyping. **Do NOT deploy or use this contract in production environments handling real financial value without an independent professional security audit.**
-
 ---
 
 StellarClear is an open-source, Stellar-native settlement evidence and reconciliation protocol. It deterministically compares expected settlement instructions with observed Stellar payments, records machine-readable reconciliation outcomes, and anchors verifiable cryptographic proof and attestations on Soroban smart contracts.

@@ -138,6 +138,10 @@ export SETTLEMENT_REGISTRY_ADMIN_ADDRESS="<ADMIN_ADDRESS>"
 
 Save these variables into your deployment configuration or secret management vault.
 
+> [!NOTE]
+> - **Active Hardened Testnet Contract (v0.1.1)**: `CCPCMPIUTKBLSJVSGPPSUHTBBY6HHT3OTE3CKUXC5BD2B3YEDSAROGC5` ([StellarExpert](https://stellar.expert/explorer/testnet/contract/CCPCMPIUTKBLSJVSGPPSUHTBBY6HHT3OTE3CKUXC5BD2B3YEDSAROGC5))
+> - **Historical Prototype Testnet Contract (v0.1.0)**: `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC`
+
 ---
 
 ## 6. Post-Deployment & Testnet Lifecycle Verification

@@ -13,12 +13,14 @@ Soroban smart contract for settlement evidence, observer quorum, disputes, and f
   <a href="https://github.com/StellarClear/stellarclear-contract/actions/workflows/release-verification.yml"><img src="https://github.com/StellarClear/stellarclear-contract/actions/workflows/release-verification.yml/badge.svg" alt="Release Verification"></a>
   <a href="https://github.com/StellarClear/stellarclear-contract/releases/tag/v0.1.1"><img src="https://img.shields.io/badge/Release-v0.1.1-brightgreen.svg" alt="Release v0.1.1"></a>
   <a href="https://stellar.org/soroban"><img src="https://img.shields.io/badge/Soroban-v27.0-7023e0.svg" alt="Soroban"></a>
+  <a href="https://www.drips.network/wave"><img src="https://img.shields.io/badge/Drips%20Wave-Stellar%20Sprint-00C853.svg" alt="Drips Wave"></a>
 </p>
 
 ---
 
 ## Quick Links
 
+- [Drips Wave Sprint Tasks](https://github.com/StellarClear/stellarclear-contract/issues?q=is%3Aissue+is%3Aopen+label%3Adrips-wave)
 - [Application Repository](https://github.com/StellarClear/stellarclear-app)
 - [Application Documentation](https://stellarclear.github.io/stellarclear-app/)
 - [Application Releases](https://github.com/StellarClear/stellarclear-app/releases)
@@ -346,6 +348,16 @@ The smart contract is the trust-minimized anchor of the larger StellarClear ecos
 
 - **GitHub Discussions**: [Ask questions and participate](https://github.com/StellarClear/stellarclear-contract/discussions)
 - **GitHub Issues**: [Report bugs or suggest features](https://github.com/StellarClear/stellarclear-contract/issues)
+
+---
+
+## Drips Wave Participation
+
+`stellarclear-contract` is eligible for and actively participates in the [Drips Wave](https://www.drips.network/wave) sprint program for the Stellar ecosystem. Developers can pick up issues tagged with [`drips-wave`](https://github.com/StellarClear/stellarclear-contract/labels/drips-wave) to help advance the Soroban smart contract and earn points from the reward pool.
+
+- **Sprint Issues**: [Browse Drips Wave Issues](https://github.com/StellarClear/stellarclear-contract/issues?q=is%3Aissue+is%3Aopen+label%3Adrips-wave)
+- **Tiers**: 100 pts (Documentation & Tests), 150 pts (Endpoint & Logic Improvements), 200 pts (Security & Cryptographic Quorum Enhancements)
+- **Guidelines**: See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for full instructions on linking pull requests and earning points.
 
 ---
 

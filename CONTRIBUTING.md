@@ -58,6 +58,28 @@ We adhere to the [Conventional Commits](https://www.conventionalcommits.org/) sp
 - `chore`: Maintenance, dependencies, or release packaging
 - `ci`: CI workflow configuration
 
+## Drips Wave Contribution Guidelines
+
+StellarClear participates in the [Drips Wave](https://www.drips.network/wave) sprint program in partnership with the Stellar Development Foundation. Community contributors can claim open tasks tagged with `drips-wave` and earn rewards upon review and merge.
+
+### Point Tiers
+- **100 Points (Trivial / Low)**: Documentation improvements, test expansions, typo fixes, or straightforward lint/type refactoring.
+- **150 Points (Medium)**: Endpoint additions, state machine enhancements, event parsing improvements, or error handling refinements.
+- **200 Points (High / Complex)**: Major protocol features, new cryptographic proof verification, multi-party quorum optimizations, or security hardening.
+
+### Sprint Workflow
+1. Browse open issues with the [`drips-wave`](https://github.com/StellarClear/stellarclear-contract/labels/drips-wave) label.
+2. Ensure you are KYC-verified on [drips.network/wave](https://www.drips.network/wave) and apply for the task through the Drips Wave application dashboard.
+3. Once assigned, branch off `main`, implement your changes, and write corresponding tests.
+4. Verify all pre-push checks pass:
+   ```bash
+   cargo fmt --all -- --check
+   cargo clippy --all-targets -- -D warnings
+   cargo test --workspace
+   ```
+5. Submit a pull request referencing your issue: `Fixes #<issue-number>`.
+6. Maintainers will review promptly. Once merged, Drips Wave registers your points for pool distribution at the end of the sprint cycle.
+
 ## Pull Request & Review Guidelines
 
 - **One issue per PR**: Keep changes modular and focused.

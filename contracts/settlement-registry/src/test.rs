@@ -4084,3 +4084,288 @@ fn test_quorum_and_dispute_ttl_bounds_and_invariants() {
         Some(cur_ledger + crate::storage::MIN_DISPUTE_TTL_LEDGERS)
     );
 }
+
+#[test]
+fn test_negative_fuzz_case_creation_ledger_boundaries() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let case_id_base = 200u8;
+
+    env.ledger().set_sequence_number(5000);
+    let cur = env.ledger().sequence();
+    assert_eq!(cur, 5000);
+
+    // 1. expires_at_ledger = 0 fails with InvalidExpiration
+    let cid0 = sample_bytes(&env, case_id_base);
+    assert_eq!(
+        client.try_create_case(
+            &cid0,
+            &owner,
+            &Some(counterparty.clone()),
+            &sample_bytes(&env, 1),
+            &0
+        ),
+        Err(Ok(Error::InvalidExpiration))
+    );
+
+    // 2. expires_at_ledger = current_ledger (5000) fails with InvalidExpiration
+    let cid1 = sample_bytes(&env, case_id_base + 1);
+    assert_eq!(
+        client.try_create_case(
+            &cid1,
+            &owner,
+            &Some(counterparty.clone()),
+            &sample_bytes(&env, 1),
+            &cur
+        ),
+        Err(Ok(Error::InvalidExpiration))
+    );
+
+    // 3. expires_at_ledger = current_ledger - 1 (4999) fails with InvalidExpiration
+    let cid2 = sample_bytes(&env, case_id_base + 2);
+    assert_eq!(
+        client.try_create_case(
+            &cid2,
+            &owner,
+            &Some(counterparty.clone()),
+            &sample_bytes(&env, 1),
+            &(cur - 1)
+        ),
+        Err(Ok(Error::InvalidExpiration))
+    );
+
+    // 4. expires_at_ledger = current_ledger + 1 (5001) succeeds
+    let cid3 = sample_bytes(&env, case_id_base + 3);
+    assert_eq!(
+        client.try_create_case(
+            &cid3,
+            &owner,
+            &Some(counterparty.clone()),
+            &sample_bytes(&env, 1),
+            &(cur + 1)
+        ),
+        Ok(Ok(()))
+    );
+    let c3 = client.get_case(&cid3);
+    assert_eq!(c3.expires_at_ledger, 5001);
+    assert_eq!(c3.status, CaseStatus::Open);
+
+    // 5. expires_at_ledger = u32::MAX succeeds as valid distant boundary
+    let cid4 = sample_bytes(&env, case_id_base + 4);
+    assert_eq!(
+        client.try_create_case(
+            &cid4,
+            &owner,
+            &Some(counterparty.clone()),
+            &sample_bytes(&env, 1),
+            &u32::MAX
+        ),
+        Ok(Ok(()))
+    );
+    let c4 = client.get_case(&cid4);
+    assert_eq!(c4.expires_at_ledger, u32::MAX);
+    assert_eq!(c4.status, CaseStatus::Open);
+}
+
+#[test]
+fn test_negative_fuzz_observation_ledger_boundaries() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    env.ledger().set_sequence_number(10000);
+    let cur = env.ledger().sequence();
+
+    let case_id = sample_bytes(&env, 210);
+    client.create_case(
+        &case_id,
+        &owner,
+        &None,
+        &sample_bytes(&env, 1),
+        &(cur + 1000),
+    );
+
+    // 1. observed_ledger = 0 fails with InvalidLedger
+    assert_eq!(
+        client.try_record_observation(
+            &observer,
+            &case_id,
+            &sample_bytes(&env, 10),
+            &0,
+            &sample_bytes(&env, 20)
+        ),
+        Err(Ok(Error::InvalidLedger))
+    );
+
+    // 2. observed_ledger = cur + 1 (future ledger) fails with InvalidLedger
+    assert_eq!(
+        client.try_record_observation(
+            &observer,
+            &case_id,
+            &sample_bytes(&env, 10),
+            &(cur + 1),
+            &sample_bytes(&env, 20)
+        ),
+        Err(Ok(Error::InvalidLedger))
+    );
+
+    // 3. observed_ledger = u32::MAX (future ledger boundary) fails with InvalidLedger
+    assert_eq!(
+        client.try_record_observation(
+            &observer,
+            &case_id,
+            &sample_bytes(&env, 10),
+            &u32::MAX,
+            &sample_bytes(&env, 20)
+        ),
+        Err(Ok(Error::InvalidLedger))
+    );
+
+    // State preservation: case is still Open, no observation recorded
+    let case = client.get_case(&case_id);
+    assert_eq!(case.status, CaseStatus::Open);
+    assert_eq!(case.observation, crate::types::Observation::None);
+
+    // 4. observed_ledger = cur succeeds
+    assert_eq!(
+        client.try_record_observation(
+            &observer,
+            &case_id,
+            &sample_bytes(&env, 10),
+            &cur,
+            &sample_bytes(&env, 20)
+        ),
+        Ok(Ok(()))
+    );
+    let case_after = client.get_case(&case_id);
+    assert_eq!(case_after.status, CaseStatus::Observed);
+}
+
+#[test]
+fn test_negative_fuzz_dispute_ttl_extreme_boundaries() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    env.ledger().set_sequence_number(5000);
+    let cur = env.ledger().sequence();
+
+    let case_id = sample_bytes(&env, 220);
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 1),
+        &(cur + 5000),
+    );
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 10),
+        &cur,
+        &sample_bytes(&env, 20),
+    );
+    client.record_break(&observer, &case_id, &BreakCode::AmountMismatch);
+
+    // 1. TTL = 0 fails
+    assert_eq!(
+        client.try_open_dispute_with_ttl(&owner, &case_id, &sample_bytes(&env, 30), &0),
+        Err(Ok(Error::InvalidExpiration))
+    );
+
+    // 2. TTL = 1 fails (below MIN_DISPUTE_TTL_LEDGERS)
+    assert_eq!(
+        client.try_open_dispute_with_ttl(&owner, &case_id, &sample_bytes(&env, 30), &1),
+        Err(Ok(Error::InvalidExpiration))
+    );
+
+    // 3. TTL = u32::MAX fails (exceeds MAX_DISPUTE_TTL_LEDGERS)
+    assert_eq!(
+        client.try_open_dispute_with_ttl(&owner, &case_id, &sample_bytes(&env, 30), &u32::MAX),
+        Err(Ok(Error::InvalidExpiration))
+    );
+
+    // 4. TTL = u32::MAX - 1000 fails
+    assert_eq!(
+        client.try_open_dispute_with_ttl(
+            &owner,
+            &case_id,
+            &sample_bytes(&env, 30),
+            &(u32::MAX - 1000)
+        ),
+        Err(Ok(Error::InvalidExpiration))
+    );
+
+    // State preservation: case remains in Break status
+    let case = client.get_case(&case_id);
+    assert_eq!(case.status, CaseStatus::Break);
+    assert_eq!(client.get_dispute_expiration(&case_id), None);
+}
+
+#[test]
+fn test_negative_fuzz_dispute_expiration_sequence_drift() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    env.ledger().set_sequence_number(5000);
+    let start_ledger = env.ledger().sequence();
+
+    let case_id = sample_bytes(&env, 230);
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 1),
+        &(start_ledger + 5000),
+    );
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 10),
+        &start_ledger,
+        &sample_bytes(&env, 20),
+    );
+    client.record_break(&observer, &case_id, &BreakCode::AmountMismatch);
+
+    let ttl = crate::storage::MIN_DISPUTE_TTL_LEDGERS;
+    client.open_dispute_with_ttl(&owner, &case_id, &sample_bytes(&env, 30), &ttl);
+    let exp_ledger = client.get_dispute_expiration(&case_id).unwrap();
+    assert_eq!(exp_ledger, start_ledger + ttl);
+
+    // 1. Premature expiration at exp_ledger - 1 fails with DisputeNotExpired
+    env.ledger().set_sequence_number(exp_ledger - 1);
+    assert_eq!(
+        client.try_expire_dispute(&case_id),
+        Err(Ok(Error::DisputeNotExpired))
+    );
+    let case_premature = client.get_case(&case_id);
+    assert_eq!(case_premature.status, CaseStatus::Disputed);
+
+    // 2. Artificial drift backwards to ledger 100 fails
+    env.ledger().set_sequence_number(100);
+    assert_eq!(
+        client.try_expire_dispute(&case_id),
+        Err(Ok(Error::DisputeNotExpired))
+    );
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Disputed);
+
+    // 3. Advancing ledger to exact expiration sequence satisfies TTL
+    env.ledger().set_sequence_number(exp_ledger);
+    assert_eq!(client.try_expire_dispute(&case_id), Ok(Ok(())));
+    let case_expired = client.get_case(&case_id);
+    assert_eq!(case_expired.status, CaseStatus::Break);
+    assert_eq!(client.get_dispute_expiration(&case_id), None);
+
+    // 4. Repeated expiration call rejected as case is now in Break
+    assert_eq!(
+        client.try_expire_dispute(&case_id),
+        Err(Ok(Error::InvalidState))
+    );
+}

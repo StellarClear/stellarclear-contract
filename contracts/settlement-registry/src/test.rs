@@ -4084,3 +4084,99 @@ fn test_quorum_and_dispute_ttl_bounds_and_invariants() {
         Some(cur_ledger + crate::storage::MIN_DISPUTE_TTL_LEDGERS)
     );
 }
+
+#[test]
+fn test_dispute_timeout_and_auto_dismissal() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+    let observer = Address::generate(&env);
+    client.add_observer(&observer);
+
+    let case_id = sample_bytes(&env, 77);
+    client.create_case(
+        &case_id,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 1),
+        &10_000,
+    );
+
+    // 1. dismiss_expired_dispute on Open state fails with InvalidState
+    assert_eq!(
+        client.try_dismiss_expired_dispute(&case_id),
+        Err(Ok(Error::InvalidState))
+    );
+
+    // 2. Advance to Observed
+    let start_ledger = env.ledger().sequence();
+    client.record_observation(
+        &observer,
+        &case_id,
+        &sample_bytes(&env, 2),
+        &start_ledger,
+        &sample_bytes(&env, 3),
+    );
+    assert_eq!(
+        client.try_dismiss_expired_dispute(&case_id),
+        Err(Ok(Error::InvalidState))
+    );
+
+    // 3. Record Break
+    client.record_break(&observer, &case_id, &BreakCode::AmountMismatch);
+    assert_eq!(
+        client.try_dismiss_expired_dispute(&case_id),
+        Err(Ok(Error::InvalidState))
+    );
+
+    // 4. Open Dispute with TTL = 200 ledgers (current = 100, expires_at = 300)
+    client.open_dispute_with_ttl(&owner, &case_id, &sample_bytes(&env, 10), &200);
+    assert_eq!(client.get_case(&case_id).status, CaseStatus::Disputed);
+    assert_eq!(client.get_dispute_expiration(&case_id), Some(300));
+
+    // 5. Premature dismissal rejection: current_ledger < expiration (100 < 300)
+    assert_eq!(
+        client.try_dismiss_expired_dispute(&case_id),
+        Err(Ok(Error::DisputeNotExpired))
+    );
+
+    // 6. Premature dismissal rejection: current_ledger == expiration (300 == 300)
+    env.ledger().set_sequence_number(300);
+    assert_eq!(
+        client.try_dismiss_expired_dispute(&case_id),
+        Err(Ok(Error::DisputeNotExpired))
+    );
+
+    // 7. Successful dismissal when current_ledger > expiration (301 > 300)
+    env.ledger().set_sequence_number(301);
+    assert_eq!(client.try_dismiss_expired_dispute(&case_id), Ok(Ok(())));
+
+    // 8. Verify state transitioned back to Break and dispute TTL cleared
+    let dismissed_case = client.get_case(&case_id);
+    assert_eq!(dismissed_case.status, CaseStatus::Break);
+    assert_eq!(dismissed_case.dispute_expires_at_ledger, None);
+    assert_eq!(client.get_dispute_expiration(&case_id), None);
+
+    // 9. Post-dismissal idempotency: calling dismiss again fails with InvalidState
+    assert_eq!(
+        client.try_dismiss_expired_dispute(&case_id),
+        Err(Ok(Error::InvalidState))
+    );
+
+    // 10. Rejection on unknown and zero case ID
+    let bogus = sample_bytes(&env, 99);
+    assert_eq!(
+        client.try_dismiss_expired_dispute(&bogus),
+        Err(Ok(Error::NotFound))
+    );
+    assert_eq!(
+        client.try_dismiss_expired_dispute(&zero_bytes(&env)),
+        Err(Ok(Error::InvalidCommitment))
+    );
+
+    // 11. Can reopen dispute from Break after dismissal
+    client.open_dispute_with_ttl(&counterparty, &case_id, &sample_bytes(&env, 20), &500);
+    let reopened = client.get_case(&case_id);
+    assert_eq!(reopened.status, CaseStatus::Disputed);
+    assert_eq!(reopened.dispute_expires_at_ledger, Some(801)); // 301 + 500
+}

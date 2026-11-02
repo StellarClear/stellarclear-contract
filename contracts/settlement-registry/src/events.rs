@@ -106,6 +106,17 @@ pub struct DisputeExpired {
 
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DisputeDismissedEvent {
+    #[topic]
+    pub case_id: BytesN<32>,
+    pub expiration_ledger: u32,
+    pub dismissed_at_ledger: u32,
+}
+
+pub type DisputeDismissed = DisputeDismissedEvent;
+
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CaseFinalized {
     #[topic]
     pub case_id: BytesN<32>,
@@ -248,6 +259,20 @@ pub fn emit_dispute_expired(
         case_id: case_id.clone(),
         expiration_ledger,
         closed_at_ledger,
+    }
+    .publish(env);
+}
+
+pub fn emit_dispute_dismissed(
+    env: &Env,
+    case_id: &BytesN<32>,
+    expiration_ledger: u32,
+    dismissed_at_ledger: u32,
+) {
+    DisputeDismissedEvent {
+        case_id: case_id.clone(),
+        expiration_ledger,
+        dismissed_at_ledger,
     }
     .publish(env);
 }

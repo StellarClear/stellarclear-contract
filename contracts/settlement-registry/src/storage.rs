@@ -48,6 +48,9 @@ pub const MIN_DISPUTE_TTL_LEDGERS: u32 = 120;
 /// Maximum dispute expiration TTL in ledgers (~30 days at 5s/ledger).
 pub const MAX_DISPUTE_TTL_LEDGERS: u32 = 518_400;
 
+/// Maximum number of cases that can be queried in a single batch call.
+pub const MAX_BATCH_QUERY_SIZE: u32 = 50;
+
 // Storage helpers for Admin
 pub fn get_admin(env: &Env) -> Option<Address> {
     env.storage().instance().get(&DataKey::Admin)

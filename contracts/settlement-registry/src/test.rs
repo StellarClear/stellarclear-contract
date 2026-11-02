@@ -7,7 +7,7 @@ use crate::types::{
 };
 use crate::{SettlementRegistry, SettlementRegistryClient};
 use soroban_sdk::testutils::{Address as _, Events as _, Ledger};
-use soroban_sdk::{Address, BytesN, Env};
+use soroban_sdk::{Address, BytesN, Env, Vec};
 
 fn create_test_env() -> (Env, Address, SettlementRegistryClient<'static>) {
     let env = Env::default();
@@ -4082,5 +4082,109 @@ fn test_quorum_and_dispute_ttl_bounds_and_invariants() {
     assert_eq!(
         client.get_dispute_expiration(&case_id),
         Some(cur_ledger + crate::storage::MIN_DISPUTE_TTL_LEDGERS)
+    );
+}
+
+#[test]
+fn test_get_cases_batch_queries() {
+    let (env, _admin, client) = create_test_env();
+    let owner = Address::generate(&env);
+    let counterparty = Address::generate(&env);
+
+    // 1. Empty batch returns empty Vec
+    let empty_ids: Vec<BytesN<32>> = Vec::new(&env);
+    let empty_res = client.get_cases_batch(&empty_ids);
+    assert_eq!(empty_res.len(), 0);
+
+    // 2. Create 3 distinct cases
+    let cid1 = sample_bytes(&env, 101);
+    let cid2 = sample_bytes(&env, 102);
+    let cid3 = sample_bytes(&env, 103);
+    let missing1 = sample_bytes(&env, 201);
+    let missing2 = sample_bytes(&env, 202);
+
+    client.create_case(
+        &cid1,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 1),
+        &500,
+    );
+    client.create_case(&cid2, &owner, &None, &sample_bytes(&env, 2), &600);
+    client.create_case(
+        &cid3,
+        &owner,
+        &Some(counterparty.clone()),
+        &sample_bytes(&env, 3),
+        &700,
+    );
+
+    // 3. Single existing case batch
+    let mut single_batch = Vec::new(&env);
+    single_batch.push_back(cid1.clone());
+    let res_single = client.get_cases_batch(&single_batch);
+    assert_eq!(res_single.len(), 1);
+    let c1 = res_single.get(0).unwrap().unwrap();
+    assert_eq!(c1.owner, owner);
+    assert_eq!(c1.terms_commitment, sample_bytes(&env, 1));
+    assert_eq!(c1.status, CaseStatus::Open);
+
+    // 4. Multi existing cases batch
+    let mut multi_batch = Vec::new(&env);
+    multi_batch.push_back(cid1.clone());
+    multi_batch.push_back(cid2.clone());
+    multi_batch.push_back(cid3.clone());
+    let res_multi = client.get_cases_batch(&multi_batch);
+    assert_eq!(res_multi.len(), 3);
+    assert_eq!(
+        res_multi.get(0).unwrap().unwrap().terms_commitment,
+        sample_bytes(&env, 1)
+    );
+    assert_eq!(
+        res_multi.get(1).unwrap().unwrap().terms_commitment,
+        sample_bytes(&env, 2)
+    );
+    assert_eq!(
+        res_multi.get(2).unwrap().unwrap().terms_commitment,
+        sample_bytes(&env, 3)
+    );
+
+    // 5. Mixed existing and missing cases
+    let mut mixed_batch = Vec::new(&env);
+    mixed_batch.push_back(cid1.clone());
+    mixed_batch.push_back(missing1.clone());
+    mixed_batch.push_back(cid3.clone());
+    mixed_batch.push_back(missing2.clone());
+    let res_mixed = client.get_cases_batch(&mixed_batch);
+    assert_eq!(res_mixed.len(), 4);
+    assert!(res_mixed.get(0).unwrap().is_some());
+    assert_eq!(
+        res_mixed.get(0).unwrap().unwrap().terms_commitment,
+        sample_bytes(&env, 1)
+    );
+    assert!(res_mixed.get(1).unwrap().is_none());
+    assert!(res_mixed.get(2).unwrap().is_some());
+    assert_eq!(
+        res_mixed.get(2).unwrap().unwrap().terms_commitment,
+        sample_bytes(&env, 3)
+    );
+    assert!(res_mixed.get(3).unwrap().is_none());
+
+    // 6. Max batch limit boundary (exactly 50 items) succeeds
+    let mut max_batch = Vec::new(&env);
+    for i in 0..50u8 {
+        max_batch.push_back(sample_bytes(&env, i));
+    }
+    let res_max = client.get_cases_batch(&max_batch);
+    assert_eq!(res_max.len(), 50);
+
+    // 7. Exceeding batch limit (51 items) fails with BatchLimitExceeded
+    let mut oversized_batch = Vec::new(&env);
+    for i in 0..51u8 {
+        oversized_batch.push_back(sample_bytes(&env, i));
+    }
+    assert_eq!(
+        client.try_get_cases_batch(&oversized_batch),
+        Err(Ok(Error::BatchLimitExceeded))
     );
 }

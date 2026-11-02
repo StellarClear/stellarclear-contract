@@ -45,7 +45,7 @@ use events::{
     emit_dispute_resolved, emit_observation_recorded, emit_observer_added, emit_observer_removed,
     emit_resolution_submitted,
 };
-use soroban_sdk::{contract, contractimpl, Address, BytesN, Env};
+use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, Vec};
 use storage::{
     add_case_attested_observer, get_attestation_record, get_case_attested_observers,
     get_case_observer, get_case_record, get_dispute_expiration, get_resolution_record, has_admin,
@@ -53,7 +53,7 @@ use storage::{
     remove_dispute_expiration, remove_observer_registered, remove_resolution_record, set_admin,
     set_attestation_record, set_case_observer, set_case_record, set_contract_version,
     set_dispute_expiration, set_observer_registered, set_resolution_record,
-    DEFAULT_DISPUTE_TTL_LEDGERS, PROTOCOL_VERSION,
+    DEFAULT_DISPUTE_TTL_LEDGERS, MAX_BATCH_QUERY_SIZE, PROTOCOL_VERSION,
 };
 use types::{
     Attestation, AttestationRole, BreakCode, CaseStatus, Decision, Observation, ObservationRecord,
@@ -697,6 +697,32 @@ impl SettlementRegistry {
         case.observer_quorum = storage::get_case_quorum(&env, &case_id);
         case.dispute_expires_at_ledger = storage::get_dispute_expiration(&env, &case_id);
         Ok(case)
+    }
+
+    /// Bulk-reads settlement case records by a list of case IDs, returning None for cases that do not exist.
+    /// Bounded by MAX_BATCH_QUERY_SIZE (50) to prevent resource exhaustion.
+    pub fn get_cases_batch(
+        env: Env,
+        case_ids: Vec<BytesN<32>>,
+    ) -> Result<Vec<Option<SettlementCase>>, Error> {
+        if case_ids.len() > MAX_BATCH_QUERY_SIZE {
+            return Err(Error::BatchLimitExceeded);
+        }
+
+        let mut results = Vec::new(&env);
+        for case_id in case_ids.iter() {
+            let record = match get_case_record(&env, &case_id) {
+                Some(mut case) => {
+                    case.observer_quorum = storage::get_case_quorum(&env, &case_id);
+                    case.dispute_expires_at_ledger =
+                        storage::get_dispute_expiration(&env, &case_id);
+                    Some(case)
+                }
+                None => None,
+            };
+            results.push_back(record);
+        }
+        Ok(results)
     }
 
     /// Reads an attestation record by case ID and attestor address.

@@ -51,4 +51,6 @@ pub enum Error {
     ObserverQuorumExceeded = 22,
     /// Maximum number of distinct observer attestations per case exceeded.
     ObserverLimitExceeded = 23,
+    /// Batch query size exceeds maximum allowed limit.
+    BatchLimitExceeded = 24,
 }

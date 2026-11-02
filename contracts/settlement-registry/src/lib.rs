@@ -41,9 +41,9 @@ use auth::{
 use errors::Error;
 use events::{
     emit_attestation_submitted, emit_case_broken, emit_case_created, emit_case_finalized,
-    emit_case_matched, emit_case_quorum_set, emit_dispute_expired, emit_dispute_opened,
-    emit_dispute_resolved, emit_observation_recorded, emit_observer_added, emit_observer_removed,
-    emit_resolution_submitted,
+    emit_case_matched, emit_case_quorum_set, emit_dispute_dismissed, emit_dispute_expired,
+    emit_dispute_opened, emit_dispute_resolved, emit_observation_recorded, emit_observer_added,
+    emit_observer_removed, emit_resolution_submitted,
 };
 use soroban_sdk::{contract, contractimpl, Address, BytesN, Env};
 use storage::{
@@ -555,6 +555,37 @@ impl SettlementRegistry {
         case.status = CaseStatus::Break;
         set_case_record(&env, &case_id, &case);
         emit_dispute_expired(&env, &case_id, exp, current_ledger);
+        Ok(())
+    }
+
+    /// Permissionless: dismisses an expired dispute after its ledger TTL has elapsed.
+    /// Requires env.ledger().sequence() > dispute.expiration_ledger.
+    /// Transitions case back to Break state and cleans up dispute resolution records.
+    pub fn dismiss_expired_dispute(env: Env, case_id: BytesN<32>) -> Result<(), Error> {
+        validate_case_identity(&case_id)?;
+        let mut case = get_case_record(&env, &case_id).ok_or(Error::NotFound)?;
+
+        if case.status != CaseStatus::Disputed {
+            return Err(Error::InvalidState);
+        }
+
+        let exp = get_dispute_expiration(&env, &case_id).ok_or(Error::DisputeNotExpired)?;
+        let current_ledger = env.ledger().sequence();
+        if current_ledger <= exp {
+            return Err(Error::DisputeNotExpired);
+        }
+
+        validate_state_transition(case.status, CaseStatus::Break)?;
+
+        remove_dispute_expiration(&env, &case_id);
+        remove_resolution_record(&env, &case_id, &case.owner);
+        if let Some(ref cp) = case.counterparty {
+            remove_resolution_record(&env, &case_id, cp);
+        }
+        case.dispute_expires_at_ledger = None;
+        case.status = CaseStatus::Break;
+        set_case_record(&env, &case_id, &case);
+        emit_dispute_dismissed(&env, &case_id, exp, current_ledger);
         Ok(())
     }
 
